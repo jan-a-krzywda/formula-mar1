@@ -1,4 +1,4 @@
-# MARL-F1 · Multi-Agent RL for F1 Strategy
+# Formula Mar1 · Multi-Agent RL for F1 Strategy
 
 A **multi-agent reinforcement learning** research project for Formula 1 race strategy. This repo contains a full-race F1-style simulation environment where each car (agent) makes strategic decisions on tyres, pit stops, and energy deployment—designed as a testbed for learning coordinated race strategies.
 
