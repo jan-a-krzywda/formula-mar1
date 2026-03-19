@@ -7,74 +7,56 @@ import numpy as np
 import csv
 import os
 
-# Import our custom modules
-from env import F1TeamEnv
+from env import F1TeamEnv, get_benchmark_action
 from networks import F1AgentNN
+from ppo import mask_pit_logits
 import render_utils
-from self_play import get_heuristic_random_action
+
 
 def main():
     # 1. Load the Environment and Neural Network
     env = F1TeamEnv(total_laps=60)
     model = F1AgentNN()
     
-    # 2. Load the Best Trained Weights
-    print("Loading trained AI weights...")
-    
-    # We now prioritize the 'best' weights from our periodic evaluation!
+    # 2. Load the Best Trained Weights (PPO)
     weight_file = "f1_best_weights.pkl" if os.path.exists("f1_best_weights.pkl") else "f1_trained_weights.pkl"
-    
+    print("Loading trained AI weights...")
     try:
         with open(weight_file, "rb") as f:
             trained_params = pickle.load(f)
         print(f"Weights loaded successfully from '{weight_file}'!")
     except FileNotFoundError:
-        print("Error: Could not find any weight files. Did you run train.py first?")
+        print("Error: Could not find any weight files. Run train.py first.")
         return
 
     # 3. Greedy Action Selection (Exploitation Only!)
-    # --- TRUE HIERARCHICAL GREEDY ACTION ---
     @jax.jit
     def greedy_action(params, obs_array):
-        """First decides IF to pit, THEN decides WHICH tire."""
         logits_tuple, _ = model.apply({'params': params}, obs_array)
-        actions = []
-        
-        for logits in logits_tuple:
-            if logits.shape[-1] == 10:
-                # Convert logits to probabilities
-                probs = jax.nn.softmax(logits, axis=-1)
-                
-                # 1. Aggregate the two massive choices
-                total_stay_out_prob = jnp.sum(probs[..., 0:7], axis=-1)
-                total_pit_prob = jnp.sum(probs[..., 7:10], axis=-1)
-                
-                # 2. Find the favorite tire (just in case we pit)
-                # jnp.argmax on the slice [7:10] returns 0, 1, or 2. We add 7 to map to 7, 8, 9.
-                favorite_tire = jnp.argmax(probs[..., 7:10], axis=-1) + 7
-                
-                # 3. The Hierarchical Choice:
-                # If Total Pit > Total Stay Out, use the favorite tire. Otherwise, output 0.
-                best_action = jnp.where(total_pit_prob > total_stay_out_prob, favorite_tire, 0)
-                actions.append(best_action[0])
-                
-            else:
-                # Pace outputs (3 nodes) don't have this split-vote issue
-                best_action = jnp.argmax(logits, axis=-1)[0]
-                actions.append(best_action)
-                
-        return jnp.array(actions)
+        logits_tuple = mask_pit_logits(logits_tuple, obs_array)
+        pace1 = jnp.argmax(logits_tuple[0], axis=-1)[0]
+        dec1  = jnp.argmax(logits_tuple[1], axis=-1)[0]
+        tyre1 = jnp.argmax(logits_tuple[2], axis=-1)[0]
+        pace2 = jnp.argmax(logits_tuple[3], axis=-1)[0]
+        dec2  = jnp.argmax(logits_tuple[4], axis=-1)[0]
+        tyre2 = jnp.argmax(logits_tuple[5], axis=-1)[0]
+        pit1_cmd = jnp.where(dec1 == 1, tyre1 + 7, 0)
+        pit2_cmd = jnp.where(dec2 == 1, tyre2 + 7, 0)
+        return jnp.array([pace1, pit1_cmd, pace2, pit2_cmd])
 
-    # 4. Split the Grid (6 AI vs 5 Random Heuristics)
+    # 4. Split the Grid (6 AI vs 5 baseline: 1-stop M->H or 2-stop M->M->S)
     all_teams = env.teams
-    random_teams = random.sample(all_teams, 5)
-    ai_teams = [t for t in all_teams if t not in random_teams]
-    
+    baseline_teams = random.sample(all_teams, 5)
+    ai_teams = [t for t in all_teams if t not in baseline_teams]
+    # Each baseline uses either 1-stop (M20->H40) or 2-stop (M25->M25->S10)
+    baseline_strategy = {t: ("1stop" if i % 2 == 0 else "2stop") for i, t in enumerate(baseline_teams)}
+
     print("\n" + "="*50)
     print("🏎️ THE GRID IS SET")
     print("="*50)
     print(f"🧠 AI Controlled (6, Yellow): {', '.join(ai_teams)}")
-    print(f"🎲 Random Baseline (5, White): {', '.join(random_teams)}")
+    print(f"📊 Baseline (5, White): {', '.join(baseline_teams)}")
+    print("   Strategies: " + ", ".join(f"{t}({s})" for t, s in baseline_strategy.items()))
     print("="*50 + "\n")
 
     # ==========================================
@@ -87,7 +69,7 @@ def main():
     # Initialize the Telemetry Logger for EVERY car
     telemetry_log = {car["id"]: [] for car in env.cars}
         
-    print("🟢 LIGHTS OUT! Watch the AI navigate through the random traffic...")
+    print("🟢 LIGHTS OUT! Watch the AI navigate through the baseline traffic...")
     time.sleep(3)
     
     obs_dict = env.reset()
@@ -97,13 +79,11 @@ def main():
         
         for team in env.teams:
             if team in ai_teams:
-                # The AI uses pure deterministic logic now
                 team_obs = jnp.array(obs_dict[team]).reshape(1, -1)
                 action_array = greedy_action(trained_params, team_obs)
                 all_actions[team] = np.array(action_array)
             else:
-                # The random baseline remains stochastic
-                all_actions[team] = np.array(get_heuristic_random_action())
+                all_actions[team] = get_benchmark_action(env, team, baseline_strategy[team])
             
         # Step the physics engine
         obs_dict, _, _, _ = env.step(all_actions)
@@ -142,7 +122,7 @@ def main():
     if winner_team in ai_teams:
         print(f"🏆 The Trained AI ({winner_id} - {winner_team}) wins the race!")
     else:
-        print(f"💥 Upsets happen! The Random Baseline ({winner_id} - {winner_team}) stole the win!")
+        print(f"💥 Upsets happen! The baseline ({winner_id} - {winner_team}) stole the win!")
 
     # ==========================================
     # PRINT WINNER'S TELEMETRY REPORT

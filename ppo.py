@@ -1,37 +1,66 @@
 import jax
 import jax.numpy as jnp
 import optax
+from jax import lax
 from networks import F1AgentNN
 
-# Instantiate the model globally for the JIT compiler to reference
 model = F1AgentNN()
 
-@jax.jit
-def compute_gae(rewards, values, next_value, done, gamma=0.999, lam=0.98):
-    """Calculates Generalized Advantage Estimation (GAE) for stability."""
-    advantages = []
-    gae = 0.0
-    for t in reversed(range(len(rewards))):
-        next_val = next_value if t == len(rewards) - 1 else values[t + 1]
+def mask_pit_logits(logits_tuple, obs):
+    """No pit rules; pass through logits unchanged."""
+    return logits_tuple
+
+
+def _gae_single(rewards, values, next_value, done, gamma=0.99, lam=0.98):
+    """GAE for one trajectory: rewards (T,), values (T,), next_value scalar."""
+    T = rewards.shape[0]
+
+    def step(carry, t):
+        gae = carry
+        t = T - 1 - t  # reverse: t runs 0..T-1 but we use as index T-1, T-2, ..
+        next_val = jnp.where(t == T - 1, next_value, values[t + 1])
         delta = rewards[t] + gamma * next_val * (1.0 - done) - values[t]
-        gae = delta + gamma * lam * (1.0 - done) * gae
-        advantages.insert(0, gae)
-    
-    returns = jnp.array(advantages) + jnp.array(values)
-    return jnp.array(advantages), returns
+        gae_new = delta + gamma * lam * (1.0 - done) * gae
+        return gae_new, gae_new
+
+    _, advantages_rev = lax.scan(step, 0.0, jnp.arange(T))
+    advantages = jnp.flip(advantages_rev, axis=0)
+    returns = advantages + values
+    return advantages, returns
+
 
 @jax.jit
-def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, returns):
-    """The core PPO algorithm compiled into a single XLA operation."""
+def compute_gae(rewards, values, next_value, done, gamma=0.99, lam=0.98):
+    """GAE for a single trajectory (rewards/values 1d)."""
+    return _gae_single(rewards, values, next_value, done, gamma, lam)
+
+
+@jax.jit
+def compute_gae_batched(rewards, values, next_value, done, gamma=0.99, lam=0.98):
+    """GAE over batch of trajectories. rewards (T, N), values (T, N), next_value (N,). Returns (T*N,) each."""
+    adv, ret = jax.vmap(
+        lambda r, v, nv: _gae_single(r, v, nv, done, gamma, lam),
+        in_axes=(1, 1, 0),
+    )(rewards, values, next_value)
+    # adv, ret are (N, T) -> flatten to (T*N,) in step-major order for PPO
+    T = rewards.shape[0]
+    adv_flat = jnp.reshape(adv.T, (T * values.shape[1],))  # (T, N) -> (T*N,)
+    ret_flat = jnp.reshape(ret.T, (T * values.shape[1],))
+    return adv_flat, ret_flat
+
+@jax.jit
+def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, returns, entropy_coef, lr=1e-4):
+    """entropy_coef: scalar, weight for entropy bonus (e.g. decay over training). lr: learning rate for Adam."""
     
     def loss_fn(p):
         logits_tuple, values = model.apply({'params': p}, obs)
+        logits_tuple = mask_pit_logits(logits_tuple, obs)
         values = jnp.squeeze(values)
         
         new_log_probs = 0.0
         entropy = 0.0
         
-        # Calculate log probs and entropy for all 4 MultiDiscrete action branches
+        # Calculate log probs and entropy for all 6 heads (pace, pit_dec, pit_tyre x2)
         for i, logits in enumerate(logits_tuple):
             action = actions[:, i]
             log_p_all = jax.nn.log_softmax(logits)
@@ -46,7 +75,7 @@ def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, retur
         
         policy_loss = -jnp.mean(jnp.minimum(ratio * advantages, clip_adv))
         value_loss = 0.5 * jnp.mean((returns - values) ** 2)
-        total_loss = policy_loss + value_loss - 0.2 * jnp.mean(entropy)
+        total_loss = policy_loss + value_loss - entropy_coef * jnp.mean(entropy)
         
         return total_loss, (policy_loss, value_loss)
 
@@ -54,7 +83,7 @@ def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, retur
     (loss, (p_loss, v_loss)), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
     
     # Apply updates
-    updates, new_opt_state = optax.adam(3e-4).update(grads, opt_state, params)
+    updates, new_opt_state = optax.adam(lr).update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
     
     return new_params, new_opt_state, p_loss, v_loss
