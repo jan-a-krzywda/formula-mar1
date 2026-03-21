@@ -1,8 +1,4 @@
-"""
-Reward analysis: run a few episodes and plot how return is generated.
-4 panels (4 episodes). Left axis (normalized -1 to 1): lap time [84,110]s, position (1→1, 22→-1), gap (+120→-1, -120→1).
-Right axis: cumulative return. Two drivers: solid and dashed. Different colors per quantity.
-"""
+"""Plot per-lap signals vs cumulative return for a few episodes (needs matplotlib)."""
 import os
 import pickle
 import numpy as np
@@ -16,9 +12,7 @@ from ppo import mask_pit_logits
 
 
 def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_action_fn=None):
-    """Run one episode, return per-lap data for the focal team.
-    If agent_params and greedy_action_fn are set, focal_team uses the agent; others use random.
-    """
+    """One episode; focal team uses greedy policy if weights given, else benchmark baselines."""
     obs_dict = env.reset(seed=seed)
     laps = []
     cumulative = 0.0
@@ -97,18 +91,12 @@ def main():
         def greedy_action_fn(params, obs_array):
             logits_tuple, _ = model.apply({"params": params}, obs_array)
             logits_tuple = mask_pit_logits(logits_tuple, obs_array)
-            pace1 = jnp.argmax(logits_tuple[0], axis=-1)[0]
-            dec1 = jnp.argmax(logits_tuple[1], axis=-1)[0]
-            tyre1 = jnp.argmax(logits_tuple[2], axis=-1)[0]
-            pace2 = jnp.argmax(logits_tuple[3], axis=-1)[0]
-            dec2 = jnp.argmax(logits_tuple[4], axis=-1)[0]
-            tyre2 = jnp.argmax(logits_tuple[5], axis=-1)[0]
-            pit1_cmd = jnp.where(dec1 == 1, tyre1 + 7, 0)
-            pit2_cmd = jnp.where(dec2 == 1, tyre2 + 7, 0)
-            return jnp.array([pace1, pit1_cmd, pace2, pit2_cmd])
+            a1 = jnp.argmax(logits_tuple[0], axis=-1)[0]
+            a2 = jnp.argmax(logits_tuple[1], axis=-1)[0]
+            return jnp.array([a1, a2], dtype=jnp.int32)
         print(f"Loaded {weight_file} (PPO) for {focal_team}.")
     else:
-        print("No weight file found; all teams use random actions.")
+        print("No weight file found; focal team uses benchmark like other teams.")
 
     episodes = []
     for ep in range(num_episodes):

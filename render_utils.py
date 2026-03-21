@@ -1,5 +1,4 @@
 import os
-import random
 
 try:
     from PIL import Image, ImageDraw, ImageFont

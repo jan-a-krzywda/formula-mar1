@@ -1,6 +1,6 @@
 """Vectorized F1 env: N independent envs stepped in parallel for batched rollouts."""
 import numpy as np
-from env import F1TeamEnv, get_benchmark_action
+from env import F1TeamEnv, get_benchmark_action, TEAM_OBS_DIM
 
 
 def _benchmark_strategy_for_team(team, teams_list):
@@ -19,11 +19,11 @@ class VecF1Env:
         self.num_envs = num_envs
         self.total_laps = total_laps
         self.envs = [F1TeamEnv(total_laps=total_laps) for _ in range(num_envs)]
-        self.obs_shape = (37,)
-        self.obs_batch_shape = (num_envs, 37)
+        self.obs_shape = (TEAM_OBS_DIM,)
+        self.obs_batch_shape = (num_envs, TEAM_OBS_DIM)
 
     def reset(self, seed=None):
-        """Reset all envs. Returns BlueCow obs array (num_envs, 37)."""
+        """Reset all envs. Returns BlueCow obs array (num_envs, TEAM_OBS_DIM)."""
         for i, env in enumerate(self.envs):
             env.reset(seed=(seed + i) if seed is not None else None)
         return self._stack_bluecow_obs()
@@ -35,8 +35,8 @@ class VecF1Env:
 
     def step(self, bluecow_actions):
         """
-        bluecow_actions: (num_envs, 4) int array.
-        Returns: obs (num_envs, 37), rewards (num_envs,), dones (num_envs,).
+        bluecow_actions: (num_envs, 2) int array — discrete action per car (0..5).
+        Returns: obs (num_envs, TEAM_OBS_DIM), rewards (num_envs,), dones (num_envs,).
         """
         next_obs = np.zeros(self.obs_batch_shape, dtype=np.float32)
         rewards = np.zeros(self.num_envs, dtype=np.float32)

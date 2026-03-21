@@ -7,8 +7,7 @@ from networks import F1AgentNN
 model = F1AgentNN()
 
 def mask_pit_logits(logits_tuple, obs):
-    """No pit rules; pass through logits unchanged."""
-    return logits_tuple
+    return logits_tuple  # placeholder if pit masking is added later
 
 
 def _gae_single(rewards, values, next_value, done, gamma=0.99, lam=0.98):
@@ -27,12 +26,6 @@ def _gae_single(rewards, values, next_value, done, gamma=0.99, lam=0.98):
     advantages = jnp.flip(advantages_rev, axis=0)
     returns = advantages + values
     return advantages, returns
-
-
-@jax.jit
-def compute_gae(rewards, values, next_value, done, gamma=0.99, lam=0.98):
-    """GAE for a single trajectory (rewards/values 1d)."""
-    return _gae_single(rewards, values, next_value, done, gamma, lam)
 
 
 @jax.jit
@@ -60,7 +53,7 @@ def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, retur
         new_log_probs = 0.0
         entropy = 0.0
         
-        # Calculate log probs and entropy for all 6 heads (pace, pit_dec, pit_tyre x2)
+        # Log probs and entropy for both car heads (6-way discrete each)
         for i, logits in enumerate(logits_tuple):
             action = actions[:, i]
             log_p_all = jax.nn.log_softmax(logits)
@@ -69,20 +62,21 @@ def ppo_update(params, opt_state, obs, actions, old_log_probs, advantages, retur
             probs = jax.nn.softmax(logits)
             entropy -= jnp.sum(probs * log_p_all, axis=-1)
             
-        # PPO Math
+        # PPO: normalize advantages per batch (reduces gradient noise vs sparse race rewards)
+        adv_mean = jnp.mean(advantages)
+        adv_std = jnp.std(advantages) + 1e-8
+        adv_n = (advantages - adv_mean) / adv_std
+
         ratio = jnp.exp(new_log_probs - old_log_probs)
-        clip_adv = jnp.clip(ratio, 1.0 - 0.2, 1.0 + 0.2) * advantages
-        
-        policy_loss = -jnp.mean(jnp.minimum(ratio * advantages, clip_adv))
+        clip_adv = jnp.clip(ratio, 1.0 - 0.2, 1.0 + 0.2) * adv_n
+
+        policy_loss = -jnp.mean(jnp.minimum(ratio * adv_n, clip_adv))
         value_loss = 0.5 * jnp.mean((returns - values) ** 2)
         total_loss = policy_loss + value_loss - entropy_coef * jnp.mean(entropy)
         
         return total_loss, (policy_loss, value_loss)
 
-    # Calculate gradients
     (loss, (p_loss, v_loss)), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
-    
-    # Apply updates
     updates, new_opt_state = optax.adam(lr).update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
     
