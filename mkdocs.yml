@@ -30,7 +30,6 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - search.suggest
@@ -54,8 +53,10 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Algorithm & RL reference: FORMULA_MAR1_ALGORITHM.md
-  - Documentation guide: guide.md
+  - Getting started:
+      - Documentation guide: guide.md
+  - Reference:
+      - Algorithm & RL: FORMULA_MAR1_ALGORITHM.md
 
 extra:
   social:
