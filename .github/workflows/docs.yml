@@ -1,7 +1,7 @@
-# Build MkDocs site and deploy to GitHub Pages (gh-pages branch).
+# Build Jekyll (Documentation Theme for Jekyll 6.0) and deploy to gh-pages.
 #
 # After first successful run:
-#   Repo → Settings → Pages → Build and deployment → Source: Deploy from a branch
+#   Repo → Settings → Pages → Source: Deploy from a branch
 #   Branch: gh-pages / / (root)
 #
 # Site URL: https://<owner>.github.io/<repo>/
@@ -12,9 +12,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "docs/**"
-      - "mkdocs.yml"
-      - "requirements-docs.txt"
+      - "jekyll/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -31,19 +29,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: ruby/setup-ruby@v1
         with:
-          python-version: "3.11"
-
-      - name: Install MkDocs
-        run: pip install -r requirements-docs.txt
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: jekyll
 
       - name: Build site
-        run: mkdocs build
+        working-directory: jekyll
+        run: bundle exec jekyll build --destination "$GITHUB_WORKSPACE/_site"
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
+          publish_dir: _site
           force_orphan: true
