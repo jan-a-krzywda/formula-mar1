@@ -1,0 +1,15 @@
+# Core training & eval (JAX / Flax)
+# Install JAX for your platform: https://jax.readthedocs.io/en/latest/installation.html
+jax>=0.4.20
+flax>=0.8.0
+optax>=0.2.0
+
+# Environment & tooling
+numpy>=1.24.0
+tensorboardX>=2.6.0
+
+# Analysis & visualization
+matplotlib>=3.7.0
+
+# Optional: GIF export in evaluate.py / main.py (render_utils)
+pillow>=10.0.0
