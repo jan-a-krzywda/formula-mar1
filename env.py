@@ -2,14 +2,17 @@ import numpy as np
 import random
 
 # --- Team action space: one discrete per car (cars ordered by id within team) ---
-# 0–2: pit S/M/H; 3–5: stay Harvest / Boost / Standard
+# Racing: 0–2 pit S/M/H; 3–5 stay Harvest / Boost / Standard
+# Pre-race (pending_starting_tyres): 0–2 = starting tyre Soft / Medium / Hard (same logits, masked)
+ACT_PIT_SOFT = 0
+ACT_PIT_MEDIUM = 1
 ACT_PIT_HARD = 2
 ACT_STAY_HRV = 3
 ACT_STAY_BOOST = 4
 ACT_STAY_STD = 5
 NUM_CAR_ACTIONS = 6
-# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_ahead, gap_behind)
-TEAM_OBS_DIM = 13
+# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_ahead, gap_behind) + pending_starting_tyres
+TEAM_OBS_DIM = 14
 
 
 def encode_pace_pit_to_action(pace: int, pit_cmd: int) -> int:
@@ -65,7 +68,7 @@ class F1TeamEnv:
                 "tyre_wear": 0.0,
                 "battery": 1.0,
                 "pit_stops": 0,
-                "compounds_used": {2},  # start on medium; track for two-compound rule
+                "compounds_used": {2},  # placeholder until pending_starting_tyres step (default medium in obs)
                 "last_lap_time": 0.0, 
                 "status": "GRID",
                 "current_pace_cmd": 1,
@@ -74,7 +77,8 @@ class F1TeamEnv:
             self.cars.append(driver_data)
 
         self.benchmark_pit_wiggles = {}  # per-team random wiggle for benchmark pit laps; cleared each reset
-            
+        self.pending_starting_tyres = True
+
         return self.get_observations()
 
     def get_observations(self):
@@ -113,6 +117,7 @@ class F1TeamEnv:
                     gap_behind_n,
                 ])
 
+            team_obs.append(1.0 if self.pending_starting_tyres else 0.0)
             obs[team] = np.array(team_obs, dtype=np.float32)
 
         return obs
@@ -215,7 +220,26 @@ class F1TeamEnv:
 
     def step(self, actions):
         """Returns observation, reward, done, and info dictionary for RL training."""
-        
+
+        if self.pending_starting_tyres:
+            for car in self.cars:
+                team_action = np.asarray(actions[car["team"]], dtype=np.int32).reshape(-1)
+                team_cars = sorted([c for c in self.cars if c["team"] == car["team"]], key=lambda x: x["id"])
+                slot = 0 if car["id"] == team_cars[0]["id"] else 1
+                idx = int(team_action[slot])
+                idx = max(0, min(2, idx))
+                compound = idx + 1  # 1=S, 2=M, 3=H
+                car["tyre_compound"] = compound
+                car["compounds_used"] = {compound}
+                car["tyre_age"] = 0.0
+                car["tyre_wear"] = 0.0
+            self.pending_starting_tyres = False
+            observations = self.get_observations()
+            rewards = {team: 0.0 for team in self.teams}
+            dones = {team: False for team in self.teams}
+            infos = {team: {} for team in self.teams}
+            return observations, rewards, dones, infos
+
         starting_order = {car["id"]: i for i, car in enumerate(self.cars)}
         starting_compound_counts = {car["id"]: len(car["compounds_used"]) for car in self.cars}
         self.current_lap += 1
@@ -261,10 +285,10 @@ class F1TeamEnv:
 
             if current_pos < prev_pos:
                 num_spots_gained = prev_pos - current_pos
-                rewards[team] += num_spots_gained * 0.001
+                rewards[team] += num_spots_gained * 0.01
             elif current_pos > prev_pos:
                 num_spots_lost = current_pos - prev_pos
-                rewards[team] -= num_spots_lost * 0.001
+                rewards[team] -= num_spots_lost * 0.01
 
         progress = self.current_lap / max(1, self.total_laps)
         for car in self.cars:

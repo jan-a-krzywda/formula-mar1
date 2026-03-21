@@ -1,0 +1,63 @@
+# Formula Mar1 — documentation site (MkDocs + Material)
+# Build locally: pip install -r requirements-docs.txt && mkdocs serve
+# Deploy: push to main (see .github/workflows/docs.yml) or: mkdocs gh-deploy
+
+site_name: Formula Mar1
+site_description: F1-style race strategy simulation and reinforcement learning
+site_author: Jan A. Krzywda
+
+# Replace YOUR_GITHUB_USERNAME / REPO with your fork (for "edit on GitHub" and social cards)
+repo_name: marl-f1
+repo_url: https://github.com/YOUR_GITHUB_USERNAME/marl-f1
+edit_uri: edit/main/docs/
+
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.details
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Algorithm & RL reference: FORMULA_MAR1_ALGORITHM.md
+  - Documentation guide: guide.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/YOUR_GITHUB_USERNAME/marl-f1

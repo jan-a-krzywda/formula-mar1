@@ -10,6 +10,7 @@ from env import (
     F1TeamEnv,
     get_benchmark_action,
     TEAM_OBS_DIM,
+    ACT_PIT_MEDIUM,
     ACT_STAY_HRV,
     ACT_STAY_STD,
 )
@@ -27,6 +28,12 @@ def pretrain_with_heuristic(model, init_params, total_laps=60):
     obs_list, act_list = [], []
     for ep in range(NUM_BC_EPISODES):
         obs_dict = bc_env.reset(seed=ep)
+        obs_list.append(obs_dict["BlueCow"].copy())
+        act_list.append(np.array([ACT_PIT_MEDIUM, ACT_PIT_MEDIUM], dtype=np.int32))
+        actions_start = {}
+        for team in bc_env.teams:
+            actions_start[team] = np.array([ACT_PIT_MEDIUM, ACT_PIT_MEDIUM], dtype=np.int32)
+        obs_dict, _, _, _ = bc_env.step(actions_start)
         while bc_env.current_lap < bc_env.total_laps:
             actions = {}
             for team in bc_env.teams:
@@ -182,13 +189,15 @@ def main():
     for _ in range(NUM_EVAL_GAMES):
         eval_obs_dict = eval_env.reset()
         hero_eval_reward = 0.0
-        while eval_env.current_lap < eval_env.total_laps:
+        while eval_env.pending_starting_tyres or eval_env.current_lap < eval_env.total_laps:
             eval_actions = {}
             for team in eval_env.teams:
                 if team == "BlueCow":
                     t_obs = jnp.array(eval_obs_dict[team]).reshape(1, -1)
                     h_act = greedy_action(hero_params, t_obs)
                     eval_actions[team] = np.array(h_act)
+                elif eval_env.pending_starting_tyres:
+                    eval_actions[team] = np.array([ACT_PIT_MEDIUM, ACT_PIT_MEDIUM], dtype=np.int32)
                 else:
                     strategy = "1stop" if others.index(team) % 2 == 0 else "2stop"
                     eval_actions[team] = get_benchmark_action(eval_env, team, strategy)
@@ -207,11 +216,18 @@ def main():
     for _ in range(n_sanity):
         eval_obs_dict = eval_env.reset()
         hero_reward = 0.0
-        while eval_env.current_lap < eval_env.total_laps:
+        while eval_env.pending_starting_tyres or eval_env.current_lap < eval_env.total_laps:
             eval_actions = {}
             for team in eval_env.teams:
-                strategy = "1stop" if (team == "BlueCow" or others.index(team) % 2 == 0) else "2stop"
-                eval_actions[team] = get_benchmark_action(eval_env, team, strategy)
+                if eval_env.pending_starting_tyres:
+                    eval_actions[team] = (
+                        np.array([ACT_PIT_MEDIUM, ACT_PIT_MEDIUM], dtype=np.int32)
+                        if team == "BlueCow"
+                        else np.zeros(2, dtype=np.int32)
+                    )
+                else:
+                    strategy = "1stop" if (team == "BlueCow" or others.index(team) % 2 == 0) else "2stop"
+                    eval_actions[team] = get_benchmark_action(eval_env, team, strategy)
             eval_obs_dict, e_rewards, _, _ = eval_env.step(eval_actions)
             hero_reward += e_rewards["BlueCow"]
         sanity_scores.append(hero_reward)
@@ -222,12 +238,12 @@ def main():
     # ==========================================
     # BATCHED TRAINING LOOP (multiple rollout rounds per update)
     # ==========================================
-    T = vec_env.total_laps
+    T = vec_env.total_laps + 1  # +1 for starting-tyre step (no reward)
     N = vec_env.num_envs
     transitions_per_update = ROLLOUT_ROUNDS * N * T
     episodes_per_update = ROLLOUT_ROUNDS * N
-    print("🏎️ Batched training: {} rounds x {} envs x 60 steps = {} episodes, {} transitions/update, {} PPO epochs".format(
-        ROLLOUT_ROUNDS, NUM_ENVS, episodes_per_update, transitions_per_update, NUM_PPO_EPOCHS))
+    print("🏎️ Batched training: {} rounds x {} envs x {} steps = {} episodes, {} transitions/update, {} PPO epochs".format(
+        ROLLOUT_ROUNDS, NUM_ENVS, T, episodes_per_update, transitions_per_update, NUM_PPO_EPOCHS))
     print("🏁 Total PPO updates: {}, eval every {} updates".format(TOTAL_PPO_UPDATES, EVAL_EVERY))
 
     for update in range(TOTAL_PPO_UPDATES):
@@ -307,13 +323,15 @@ def main():
             for _ in range(NUM_EVAL_GAMES):
                 eval_obs_dict = eval_env.reset()
                 hero_eval_reward = 0.0
-                while eval_env.current_lap < eval_env.total_laps:
+                while eval_env.pending_starting_tyres or eval_env.current_lap < eval_env.total_laps:
                     eval_actions = {}
                     for team in eval_env.teams:
                         if team == "BlueCow":
                             t_obs = jnp.array(eval_obs_dict[team]).reshape(1, -1)
                             h_act = greedy_action(hero_params, t_obs)
                             eval_actions[team] = np.array(h_act)
+                        elif eval_env.pending_starting_tyres:
+                            eval_actions[team] = np.array([ACT_PIT_MEDIUM, ACT_PIT_MEDIUM], dtype=np.int32)
                         else:
                             strategy = "1stop" if others.index(team) % 2 == 0 else "2stop"
                             eval_actions[team] = get_benchmark_action(eval_env, team, strategy)

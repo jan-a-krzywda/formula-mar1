@@ -59,7 +59,7 @@ def main():
     
     obs_dict = env.reset()
     
-    while env.current_lap < env.total_laps:
+    while env.pending_starting_tyres or env.current_lap < env.total_laps:
         all_actions = {}
         
         for team in env.teams:
@@ -67,6 +67,8 @@ def main():
                 team_obs = jnp.array(obs_dict[team]).reshape(1, -1)
                 action_array = greedy_action(trained_params, team_obs)
                 all_actions[team] = np.array(action_array)
+            elif env.pending_starting_tyres:
+                all_actions[team] = np.array([1, 1], dtype=np.int32)  # medium (matches scripted baseline)
             else:
                 # Benchmark pit strategy only; energy mode is random HRV/BST/STD so MODE updates in telemetry
                 all_actions[team] = get_benchmark_action(

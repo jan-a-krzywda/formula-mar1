@@ -18,13 +18,15 @@ def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_
     cumulative = 0.0
 
     others = [t for t in env.teams if t != focal_team]
-    while env.current_lap < env.total_laps:
+    while env.pending_starting_tyres or env.current_lap < env.total_laps:
         actions = {}
         for team in env.teams:
             if team == focal_team and agent_params is not None and greedy_action_fn is not None:
                 obs = jnp.array(obs_dict[team]).reshape(1, -1)
                 act = greedy_action_fn(agent_params, obs)
                 actions[team] = np.array(act)
+            elif env.pending_starting_tyres:
+                actions[team] = np.array([1, 1], dtype=np.int32)  # medium for benchmarks
             else:
                 strategy = "1stop" if others.index(team) % 2 == 0 else "2stop"
                 actions[team] = get_benchmark_action(env, team, strategy)
@@ -32,6 +34,11 @@ def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_
 
         r = rewards[focal_team]
         cumulative += r
+
+        # Skip the tyre-setup step (current_lap still 0): no race lap yet, last_lap_time is 0
+        # so lap/telemetry would be bogus and cumulative return would look like a "jump at lap 1".
+        if env.current_lap < 1:
+            continue
 
         # Race order and gaps (cars sorted by total_race_time)
         sorted_cars = sorted(env.cars, key=lambda c: c["total_race_time"])

@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-from env import F1TeamEnv
+from env import F1TeamEnv, ACT_PIT_HARD
 import render_utils
 
 
@@ -16,8 +16,14 @@ def main():
     print("LIGHTS OUT AND AWAY WE GO! (Testing Modular RL Environment...)")
     time.sleep(1)
 
-    while env.current_lap < env.total_laps:
-        actions = {team: np.random.randint(0, 6, size=2, dtype=np.int32) for team in env.teams}
+    while env.pending_starting_tyres or env.current_lap < env.total_laps:
+        if env.pending_starting_tyres:
+            actions = {
+                team: np.random.randint(0, ACT_PIT_HARD + 1, size=2, dtype=np.int32)
+                for team in env.teams
+            }
+        else:
+            actions = {team: np.random.randint(0, 6, size=2, dtype=np.int32) for team in env.teams}
         obs, rewards, dones, infos = env.step(actions)
         render_utils.render_telemetry(env)
 

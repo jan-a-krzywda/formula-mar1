@@ -47,6 +47,9 @@ class VecF1Env:
             for team in env.teams:
                 if team == "BlueCow":
                     actions[team] = bluecow_actions[i]
+                elif env.pending_starting_tyres:
+                    # medium start (action index 1) for scripted benchmarks; must match reset default
+                    actions[team] = np.array([1, 1], dtype=np.int32)
                 else:
                     strategy = _benchmark_strategy_for_team(team, env.teams)
                     actions[team] = get_benchmark_action(env, team, strategy)

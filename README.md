@@ -1,49 +1,94 @@
-# Formula Mar1 · Multi-Agent RL for F1 Strategy
+# Formula Mar1 · F1-style race strategy RL
 
-A **multi-agent reinforcement learning** research project for Formula 1 race strategy. This repo contains a full-race F1-style simulation environment where each car (agent) makes strategic decisions on tyres, pit stops, and energy deployment—designed as a testbed for learning coordinated race strategies.
+Multi-car **Formula 1–style** simulation with **tyre compounds**, **pit strategy**, **ERS-style battery modes** (Harvest / Standard / Boost / Overtake), and **reinforcement learning** (behavioral cloning + PPO) for the trainable team **BlueCow**. Opponents use **fixed benchmark** pit strategies.
 
-![F1 2026 simulation](f1_2026_simulation.gif)
+**Documentation**
+
+- **GitHub Pages site** (after you enable Pages — see [docs/README.md](docs/README.md)): `https://<your-username>.github.io/<repo>/`
+- [Documentation folder](docs/README.md) · [Guide](docs/guide.md) · [Algorithm & RL reference](docs/FORMULA_MAR1_ALGORITHM.md)
+- Build locally: `pip install -r requirements-docs.txt && mkdocs serve`
 
 ---
 
-## What’s in the repo
+## Features
 
-- **F1 race simulation** — Lap-by-lap simulation of a full grand prix (e.g. 60 laps, 22 cars) with:
-  - **Tyres**: Medium (M), Hard (H), Soft (S), with wear and pit stops
-  - **Energy**: Battery level and deployment modes (Harvest, Standard, Boost, Overtake)
-  - **Standings**: Position, gap, interval, last lap time, laps on current tyres, pit count
+- **22 cars, 11 teams** — Random grid; lap-by-lap `total_race_time` standings.
+- **Strategic actions** — Per car: pit (Soft/Medium/Hard), stay out with Harvest/Boost/Standard; **starting tyre choice** before lap 1.
+- **Regulations** — Two-compound rule per car; shaping + terminal penalties/rewards.
+- **Baselines** — 1-stop and 2-stop scripted strategies for non-trained teams.
+- **Training** — JAX + Flax + Optax; vectorized rollouts; TensorBoard logs under `runs/`.
+- **Visualization** — Terminal timing board (`render_utils.py`), optional GIF from `evaluate.py`.
 
-- **Terminal UI** — Live race view in the terminal, styled like a broadcast timing screen (“FIA Formula Mar1 World Championship”).
+---
 
-- **GIF export** — The notebook can render the race to an animated GIF (like the one above) for sharing and analysis.
+## Requirements
 
-- **MARL-ready setup** — The environment is structured so each car can be controlled by a separate agent, with shared state (standings, track conditions) and individual actions (pit, tyre choice, energy mode), suitable for multi-agent RL experiments.
+- Python **3.10+** recommended.
+- **[JAX](https://github.com/google/jax)** — install the variant that matches your OS/GPU (CPU wheels are fine for small experiments).
+
+Install dependencies:
+
+```bash
+cd marl-f1
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+# Then install JAX for your platform, e.g. CPU-only:
+# pip install -U "jax[cpu]"
+```
 
 ---
 
 ## Quick start
 
-1. Clone the repo and open the Jupyter notebook:
-   ```bash
-   git clone <repo-url>
-   cd marl-f1
-   jupyter notebook test.ipynb
-   ```
-2. Run all cells to simulate a full race and (optionally) generate the GIF.
+| Command | What it does |
+|---------|----------------|
+| `python train.py` | BC pretrain + PPO; writes `f1_best_weights.pkl`, `f1_trained_weights.pkl`, TensorBoard |
+| `python evaluate.py` | Load weights, run one showcase race, optional GIF + `full_race_telemetry.csv` |
+| `python analyze_rewards.py` | Episodes + plots → `reward_analysis.png` |
+| `python main.py` | Random actions + quick GIF smoke test |
+
+**Notebook:** open `gym.ipynb` in Jupyter for interactive experiments.
 
 ---
 
-## Simulation details
+## Project layout
 
-- **Track state**: e.g. “Green” (no rain); can be extended for weather.
-- **Driver/team data**: Placeholder names (PER, LAW, SAI, etc.) for 22 cars.
-- **Modes**: HRV (harvest), STD (standard), BST (boost), OVR (overtake), PIT (in pit).
-- **Battery**: Displayed as a simple bar; usage depends on mode and can be hooked to rewards for MARL.
-
-The goal is to use this environment to train agents that learn when to pit, which compound to use, and how to manage energy over the race—both individually and in a multi-agent setting.
+```
+marl-f1/
+├── README.md                 # This file (GitHub landing page)
+├── requirements.txt
+├── requirements-docs.txt     # MkDocs only (GitHub Pages)
+├── mkdocs.yml                # Documentation site config
+├── docs/
+│   ├── index.md              # Doc site home (MkDocs)
+│   ├── README.md             # Doc index + Pages setup
+│   └── FORMULA_MAR1_ALGORITHM.md
+├── .github/workflows/
+│   └── docs.yml              # Deploy docs to gh-pages
+├── env.py                    # Simulation + rewards
+├── vec_env.py                # Batched envs for training
+├── networks.py               # Policy / value network
+├── ppo.py                    # PPO + GAE + logit masks
+├── train.py                  # Training entry point
+├── evaluate.py               # Evaluation + telemetry
+├── analyze_rewards.py
+├── render_utils.py
+└── main.py
+```
 
 ---
 
-## License
+## Documentation on GitHub
 
-See repository license. Simulation by Jan A. Krzywda.
+- **Repo home** shows this **`README.md`** first.
+- **`docs/`** holds Markdown sources; the **MkDocs** site is defined by **`mkdocs.yml`** and deployed by **`.github/workflows/docs.yml`** to the **`gh-pages`** branch.
+- Enable **Settings → Pages → branch `gh-pages` / root** to publish **`https://<user>.github.io/<repo>/`**.
+
+See **[docs/README.md](docs/README.md)** for the full index and setup steps.
+
+---
+
+## License & credits
+
+See the repository license file if present. Simulation credits: Jan A. Krzywda (see `render_utils.py`).

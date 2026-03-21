@@ -4,7 +4,7 @@ from env import NUM_CAR_ACTIONS, TEAM_OBS_DIM
 
 
 class F1AgentNN(nn.Module):
-    """Shared trunk + two 6-way policy heads + value."""
+    """Shared trunk + two 6-way policy heads + value (first step masked to S/M/H if obs[..., -1]==1)."""
 
     @nn.compact
     def __call__(self, x):

@@ -7,7 +7,14 @@ from networks import F1AgentNN
 model = F1AgentNN()
 
 def mask_pit_logits(logits_tuple, obs):
-    return logits_tuple  # placeholder if pit masking is added later
+    """When obs[..., -1] == 1 (pending_starting_tyres), only Soft/Med/Hard (logits 0–2) are valid."""
+    pending = obs[..., -1] > 0.5
+    mask_tail = jnp.array([0.0, 0.0, 0.0, -1e10, -1e10, -1e10], dtype=jnp.float32)
+    out = []
+    for logits in logits_tuple:
+        m = jnp.where(pending[:, None], mask_tail, 0.0)
+        out.append(logits + m)
+    return tuple(out)
 
 
 def _gae_single(rewards, values, next_value, done, gamma=0.99, lam=0.98):
