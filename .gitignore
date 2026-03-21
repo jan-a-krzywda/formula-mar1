@@ -1,5 +1,9 @@
-# MkDocs output
+# Static site build outputs
 site/
+/_site/
+
+# Sphinx
+sphinx/build/
 
 # Python
 .venv/
@@ -17,3 +21,6 @@ build/
 .vscode/
 *.swp
 .DS_Store
+
+
+events*

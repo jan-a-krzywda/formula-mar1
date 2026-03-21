@@ -1,5 +1,7 @@
 # Formula Mar1: Technical Reference for RL + Blog Adaptation
 
+*The Python API on GitHub Pages is built with **Sphinx** from `*.py`; this file is narrative Markdown in `docs/`.*
+
 *Part of the [documentation guide](guide.md).*
 
 This document summarizes the **multi-agent Formula 1–style racing simulation**, the **reward design**, and the **JAX / Flax PPO + behavioral cloning** pipeline used in this repository. It is written so another model or author can turn it into a long-form blog post, talk, or tutorial.
@@ -190,6 +192,8 @@ r_{\text{pace, car}} = \frac{87 - \text{pace\_time}_{\text{adjusted}}}{500}
 | `evaluate.py` | Visual / GIF evaluation |
 | `analyze_rewards.py` | Per-lap telemetry plots |
 
+*Class / function reference (Sphinx):* [**Module index**](https://jan-a-krzywda.github.io/formula-mar1/py-modindex.html) · [Index](https://jan-a-krzywda.github.io/formula-mar1/genindex.html).
+
 ---
 
 ## 10. Suggested Mermaid diagrams (for the blog)
@@ -303,4 +307,4 @@ You can paste the following with this file:
 
 ---
 
-*Document generated to match the `marl-f1` repository layout; when the code changes, prefer the implementation over this file.*
+*Document generated to match the `formula-mar1` repository layout; when the code changes, prefer the implementation over this file.*

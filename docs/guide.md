@@ -2,23 +2,17 @@
 
 ## Published documentation site (GitHub Pages)
 
-This project includes **MkDocs + Material** and a **GitHub Actions** workflow that deploys the site to the **`gh-pages`** branch.
+**Default deployment:** **Sphinx** API docs from **`sphinx/`** (see **`docs/README.md`**). **GitHub Actions** runs **`sphinx-build`** and pushes to **`gh-pages`**.
 
-1. Push these files to **`main`** (or **`master`**): `mkdocs.yml`, `docs/`, `requirements-docs.txt`, `.github/workflows/docs.yml`.
-2. Open **Settings → Pages** in the GitHub repo.
-3. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-4. Choose branch **`gh-pages`**, folder **`/ (root)`**, Save.
-5. After the workflow runs, the site is available at:
+1. Push **`sphinx/`**, **`*.py`**, **`.github/workflows/docs.yml`** to **`main`**.
+2. **Settings → Pages** → **`gh-pages`** / root.
+3. **`https://jan-a-krzywda.github.io/formula-mar1/`** — [Module index](https://jan-a-krzywda.github.io/formula-mar1/py-modindex.html).
 
-   **`https://<your-username>.github.io/<repo-name>/`**
-
-**Local preview:** `pip install -r requirements-docs.txt` then `mkdocs serve`.
-
-**Customize:** Edit `repo_url`, `edit_uri`, and `social` links in **`mkdocs.yml`** (replace `YOUR_GITHUB_USERNAME`).
+**Local preview:** `pip install -r sphinx/requirements.txt && sphinx-build -b html sphinx/source sphinx/build/html`
 
 ---
 
-Welcome to the **Formula Mar1** project documentation. These pages also render as plain Markdown on GitHub.
+Welcome to the **Formula Mar1** project documentation. These pages render as plain Markdown on GitHub; the **Python API** is on GitHub Pages (Sphinx).
 
 | Document | Description |
 |----------|-------------|
@@ -62,12 +56,12 @@ GitHub is **documentation-first**: visitors land on the repo home and see whatev
 
 ### 2. This `docs/` folder
 
-- **`guide.md`** (this file) acts as a **table of contents** for the doc site and GitHub.
-- **`index.md`** is the **MkDocs** homepage; **`README.md`** in `docs/` is a short pointer for the GitHub UI.
+- **`guide.md`** (this file) — repo map and how to publish docs.
+- **`index.md`** — short pointer for the GitHub UI.
 
-### 3. Optional: GitHub Pages (static site)
+### 3. GitHub Pages (Sphinx API)
 
-The repo uses **MkDocs** deployed to **`gh-pages`** (see top of this page). You can also browse Markdown directly on GitHub without Pages.
+See the top of this page: **`sphinx/`** builds the site deployed to **`gh-pages`**. Narrative Markdown stays in **`docs/`** on GitHub.
 
 ### 4. Optional: Wiki
 

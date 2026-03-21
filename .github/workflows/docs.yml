@@ -1,10 +1,10 @@
-# Build Jekyll (Documentation Theme for Jekyll 6.0) and deploy to gh-pages.
+# Build Sphinx HTML API docs and deploy to gh-pages.
 #
 # After first successful run:
 #   Repo → Settings → Pages → Source: Deploy from a branch
 #   Branch: gh-pages / / (root)
 #
-# Site URL: https://<owner>.github.io/<repo>/
+# Site URL: https://jan-a-krzywda.github.io/formula-mar1/
 
 name: Deploy documentation
 
@@ -12,8 +12,9 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "jekyll/**"
+      - "sphinx/**"
       - ".github/workflows/docs.yml"
+      - "*.py"
   workflow_dispatch:
 
 permissions:
@@ -29,15 +30,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/setup-python@v5
         with:
-          ruby-version: "3.3"
-          bundler-cache: true
-          working-directory: jekyll
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sphinx/requirements.txt
 
-      - name: Build site
-        working-directory: jekyll
-        run: bundle exec jekyll build --destination "$GITHUB_WORKSPACE/_site"
+      - name: Install Sphinx
+        run: pip install -r sphinx/requirements.txt
+
+      - name: Build HTML
+        run: |
+          sphinx-build -b html sphinx/source "$GITHUB_WORKSPACE/_site"
+          touch "$GITHUB_WORKSPACE/_site/.nojekyll"
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4

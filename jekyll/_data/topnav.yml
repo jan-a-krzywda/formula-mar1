@@ -1,8 +1,0 @@
-## Top navigation (Documentation Theme for Jekyll)
-topnav:
-- title: Topnav
-  items:
-    - title: GitHub
-      external_url: https://github.com/jan-a-krzywda/formula-mar1
-
-topnav_dropdowns: []

@@ -4,9 +4,11 @@ Multi-car **Formula 1–style** simulation with **tyre compounds**, **pit strate
 
 **Documentation**
 
-- **GitHub Pages site** (after you enable Pages — see [docs/README.md](docs/README.md)): `https://<your-username>.github.io/<repo>/`
+- **GitHub Pages** (after you enable Pages — see [docs/README.md](docs/README.md)): **`https://jan-a-krzywda.github.io/formula-mar1/`** — **Sphinx** auto-generated Python API (`sphinx.ext.autodoc`)
+- **Sphinx:** [`sphinx/`](sphinx/) · build: `pip install -r sphinx/requirements.txt && sphinx-build -b html sphinx/source sphinx/build/html`
+- **Narrative Markdown** (browse on GitHub): [docs/](docs/README.md) — guide + algorithm reference
 - [Documentation folder](docs/README.md) · [Guide](docs/guide.md) · [Algorithm & RL reference](docs/FORMULA_MAR1_ALGORITHM.md)
-- Build locally: `pip install -r requirements-docs.txt && mkdocs serve`
+- **Python API (Sphinx):** [Module index](https://jan-a-krzywda.github.io/formula-mar1/py-modindex.html) · [Index](https://jan-a-krzywda.github.io/formula-mar1/genindex.html)
 
 ---
 
@@ -29,7 +31,7 @@ Multi-car **Formula 1–style** simulation with **tyre compounds**, **pit strate
 Install dependencies:
 
 ```bash
-cd marl-f1
+cd formula-mar1
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -55,17 +57,19 @@ pip install -r requirements.txt
 ## Project layout
 
 ```
-marl-f1/
+formula-mar1/
 ├── README.md                 # This file (GitHub landing page)
 ├── requirements.txt
-├── requirements-docs.txt     # MkDocs only (GitHub Pages)
-├── mkdocs.yml                # Documentation site config
+├── sphinx/                   # Sphinx API docs (deployed to GitHub Pages)
+│   ├── source/conf.py
+│   └── requirements.txt
 ├── docs/
-│   ├── index.md              # Doc site home (MkDocs)
 │   ├── README.md             # Doc index + Pages setup
+│   ├── index.md
+│   ├── guide.md
 │   └── FORMULA_MAR1_ALGORITHM.md
 ├── .github/workflows/
-│   └── docs.yml              # Deploy docs to gh-pages
+│   └── docs.yml              # Sphinx HTML → deploy to gh-pages
 ├── env.py                    # Simulation + rewards
 ├── vec_env.py                # Batched envs for training
 ├── networks.py               # Policy / value network
@@ -82,10 +86,12 @@ marl-f1/
 ## Documentation on GitHub
 
 - **Repo home** shows this **`README.md`** first.
-- **`docs/`** holds Markdown sources; the **MkDocs** site is defined by **`mkdocs.yml`** and deployed by **`.github/workflows/docs.yml`** to the **`gh-pages`** branch.
-- Enable **Settings → Pages → branch `gh-pages` / root** to publish **`https://<user>.github.io/<repo>/`**.
+- **`sphinx/`** is the **Sphinx** project; **`.github/workflows/docs.yml`** runs **`sphinx-build`** and pushes HTML to the **`gh-pages`** branch.
+- Enable **Settings → Pages → branch `gh-pages` / root** to publish **`https://jan-a-krzywda.github.io/formula-mar1/`**.
 
 See **[docs/README.md](docs/README.md)** for the full index and setup steps.
+
+**Sphinx** API HTML is regenerated when you push **`*.py`** (workflow) or re-run **`sphinx-apidoc`** (see `sphinx/README.md`). Narrative content lives in **`docs/`** only.
 
 ---
 

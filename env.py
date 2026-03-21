@@ -11,8 +11,11 @@ ACT_STAY_HRV = 3
 ACT_STAY_BOOST = 4
 ACT_STAY_STD = 5
 NUM_CAR_ACTIONS = 6
-# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_ahead, gap_behind) + pending_starting_tyres
-TEAM_OBS_DIM = 14
+NUM_CARS = 22  # 11 teams × 2 drivers
+TIMETOWER_CLIP_SEC = 60.0  # gap to leader: clip to ±60 s, then /60 → [-1, 1]; leader is 0
+# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_ahead, gap_behind)
+# + full timetower (NUM_CARS gaps to leader) + pending_starting_tyres
+TEAM_OBS_DIM = 1 + 2 * 6 + NUM_CARS + 1
 
 
 def encode_pace_pit_to_action(pace: int, pit_cmd: int) -> int:
@@ -116,6 +119,13 @@ class F1TeamEnv:
                     gap_ahead_n,
                     gap_behind_n,
                 ])
+
+            leader_time = sorted_cars[0]["total_race_time"]
+            for c in sorted_cars:
+                gap_to_leader = c["total_race_time"] - leader_time
+                team_obs.append(
+                    float(np.clip(gap_to_leader, -TIMETOWER_CLIP_SEC, TIMETOWER_CLIP_SEC) / TIMETOWER_CLIP_SEC)
+                )
 
             team_obs.append(1.0 if self.pending_starting_tyres else 0.0)
             obs[team] = np.array(team_obs, dtype=np.float32)
