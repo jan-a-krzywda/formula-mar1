@@ -1,8 +1,8 @@
 import time
 import numpy as np
 
-from env import F1TeamEnv, ACT_PIT_HARD
-import render_utils
+from formula_mar1.env import F1TeamEnv, ACT_PIT_HARD
+from formula_mar1 import render_utils
 
 
 def main():
@@ -36,18 +36,19 @@ def main():
     print("\n--- RL API TEST OUTPUT (Final Lap) ---")
     print(f"Sample Observation (BlueCow): {obs['BlueCow']}")
     print(f"Final Rewards Dictionary: {rewards}")
-    
+
     if render_utils.PIL_AVAILABLE and len(frames) > 0:
         print("\nCompiling test GIF...")
         frames[0].save(
-            'f1_2026_modular_test.gif',
+            "f1_2026_modular_test.gif",
             save_all=True,
             append_images=frames[1:],
             optimize=True,
-            duration=300, 
-            loop=0
+            duration=300,
+            loop=0,
         )
         print("f1_2026_modular_test.gif saved successfully!")
+
 
 if __name__ == "__main__":
     main()

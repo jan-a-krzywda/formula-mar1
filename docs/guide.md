@@ -25,15 +25,17 @@ Welcome to the **Formula Mar1** project documentation. These pages render as pla
 
 | Path | Role |
 |------|------|
-| `env.py` | `F1TeamEnv`: race logic, rewards, starting tyres, benchmarks |
-| `vec_env.py` | Parallel envs for PPO rollouts (BlueCow + scripted opponents) |
-| `networks.py` | Flax `F1AgentNN` (policy + value) |
-| `ppo.py` | GAE, PPO update, logit masking |
-| `train.py` | BC pretraining + PPO training loop, eval, checkpoints |
+| `formula_mar1/env.py` | `F1TeamEnv`: race logic, rewards, starting tyres, benchmarks |
+| `formula_mar1/vec_env.py` | Parallel envs for PPO rollouts (BlueCow + scripted opponents) |
+| `formula_mar1/networks.py` | Flax `F1AgentNN` (policy + value) |
+| `formula_mar1/ppo.py` | GAE, PPO update, logit masking |
+| `formula_mar1/train.py` | BC pretraining + PPO training loop, eval, checkpoints |
+| `train.py` (root) | CLI entry that runs `formula_mar1.train` |
 | `evaluate.py` | Greedy policy vs baselines, telemetry CSV, optional GIF |
-| `analyze_rewards.py` | Per-lap plots → `reward_analysis.png` |
+| `analysis/analyze_rewards.py` | Per-lap plots → `reward_analysis.png` |
+| `analysis/` | Learning-curve study + plot helpers |
 | `main.py` | Minimal random-action smoke test + GIF |
-| `render_utils.py` | Terminal timing screen + PIL → image for GIFs |
+| `formula_mar1/render_utils.py` | Terminal timing screen + PIL → image for GIFs |
 | `gym.ipynb` | Notebook experiments (if present) |
 
 **Artifacts (not always in git):** `f1_best_weights.pkl`, `f1_trained_weights.pkl`, `runs/` (TensorBoard), `full_race_telemetry.csv`, generated GIFs.

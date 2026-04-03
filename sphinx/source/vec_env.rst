@@ -1,7 +1,7 @@
 vec\_env module
 ===============
 
-.. automodule:: vec_env
+.. automodule:: formula_mar1.vec_env
    :members:
    :undoc-members:
    :show-inheritance:

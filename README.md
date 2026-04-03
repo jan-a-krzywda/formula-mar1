@@ -19,7 +19,7 @@ Multi-car **Formula 1–style** simulation with **tyre compounds**, **pit strate
 - **Regulations** — Two-compound rule per car; shaping + terminal penalties/rewards.
 - **Baselines** — 1-stop and 2-stop scripted strategies for non-trained teams.
 - **Training** — JAX + Flax + Optax; vectorized rollouts; TensorBoard logs under `runs/`.
-- **Visualization** — Terminal timing board (`render_utils.py`), optional GIF from `evaluate.py`.
+- **Visualization** — Terminal timing board (`formula_mar1/render_utils.py`), optional GIF from `evaluate.py`.
 
 ---
 
@@ -47,7 +47,7 @@ pip install -r requirements.txt
 |---------|----------------|
 | `python train.py` | BC pretrain + PPO; writes `f1_best_weights.pkl`, `f1_trained_weights.pkl`, TensorBoard |
 | `python evaluate.py` | Load weights, run one showcase race, optional GIF + `full_race_telemetry.csv` |
-| `python analyze_rewards.py` | Episodes + plots → `reward_analysis.png` |
+| `python analysis/analyze_rewards.py` | Episodes + plots → `reward_analysis.png` |
 | `python main.py` | Random actions + quick GIF smoke test |
 
 **Notebook:** open `gym.ipynb` in Jupyter for interactive experiments.
@@ -60,6 +60,19 @@ pip install -r requirements.txt
 formula-mar1/
 ├── README.md                 # This file (GitHub landing page)
 ├── requirements.txt
+├── formula_mar1/             # Core env, policy, PPO, training, rendering
+│   ├── env.py
+│   ├── vec_env.py
+│   ├── networks.py
+│   ├── ppo.py
+│   ├── train.py
+│   ├── render_utils.py
+│   └── checkpoint_utils.py
+├── analysis/                 # Plots, learning-curve studies, reward analysis
+│   ├── analyze_rewards.py
+│   ├── learning_curve_study.py
+│   ├── plot_learning_curves.py
+│   └── plot_best_agent_performance.py
 ├── sphinx/                   # Sphinx API docs (deployed to GitHub Pages)
 │   ├── source/conf.py
 │   └── requirements.txt
@@ -70,15 +83,9 @@ formula-mar1/
 │   └── FORMULA_MAR1_ALGORITHM.md
 ├── .github/workflows/
 │   └── docs.yml              # Sphinx HTML → deploy to gh-pages
-├── env.py                    # Simulation + rewards
-├── vec_env.py                # Batched envs for training
-├── networks.py               # Policy / value network
-├── ppo.py                    # PPO + GAE + logit masks
-├── train.py                  # Training entry point
+├── train.py                  # Thin CLI → `formula_mar1.train`
 ├── evaluate.py               # Evaluation + telemetry
-├── analyze_rewards.py
-├── render_utils.py
-└── main.py
+└── main.py                   # Random-action smoke test + GIF
 ```
 
 ---
@@ -97,4 +104,4 @@ See **[docs/README.md](docs/README.md)** for the full index and setup steps.
 
 ## License & credits
 
-See the repository license file if present. Simulation credits: Jan A. Krzywda (see `render_utils.py`).
+See the repository license file if present. Simulation credits: Jan A. Krzywda (see `formula_mar1/render_utils.py`).

@@ -10,6 +10,7 @@ tensorboardX>=2.6.0
 
 # Analysis & visualization
 matplotlib>=3.7.0
+seaborn>=0.13.0
 
 # Optional: GIF export in evaluate.py / main.py (render_utils)
 pillow>=10.0.0

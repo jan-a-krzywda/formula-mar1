@@ -13,9 +13,13 @@ ACT_STAY_STD = 5
 NUM_CAR_ACTIONS = 6
 NUM_CARS = 22  # 11 teams × 2 drivers
 TIMETOWER_CLIP_SEC = 60.0  # gap to leader: clip to ±60 s, then /60 → [-1, 1]; leader is 0
-# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_ahead, gap_behind)
-# + full timetower (NUM_CARS gaps to leader) + pending_starting_tyres
-TEAM_OBS_DIM = 1 + 2 * 6 + NUM_CARS + 1
+PIT_GAP_WINDOW_SEC = 25.0  # same scale as pit loss: cars behind within this time count as "in the pit window"
+# lap_fraction + 2 cars × (compound, tyre_age, battery, override, gap_to_leader, gap_ahead, gap_behind, cars_in_pit_gap_behind, hard_already_used)
+# + pending_starting_tyres
+TEAM_OBS_DIM = 1 + 2 * 9 + 1
+# Indices for mask_pit_logits: 1 (lap) + 9 features per car; last feature per car is hard_already_used
+OBS_CAR1_HARD_USED_IDX = 9
+OBS_CAR2_HARD_USED_IDX = 18
 
 
 def encode_pace_pit_to_action(pace: int, pit_cmd: int) -> int:
@@ -50,6 +54,9 @@ class F1TeamEnv:
 
     def reset(self, seed=None):
         if seed is not None:
+            # np.random.seed (legacy MT19937) only accepts [0, 2**32 - 1]; callers may pass
+            # larger ints (e.g. bc_seed * 1000, rollout offsets).
+            seed = int(np.uint32(seed))
             random.seed(seed)
             np.random.seed(seed)
             
@@ -79,7 +86,8 @@ class F1TeamEnv:
             })
             self.cars.append(driver_data)
 
-        self.benchmark_pit_wiggles = {}  # per-team random wiggle for benchmark pit laps; cleared each reset
+        self.benchmark_pit_wiggles = {}  # legacy cache; kept for compatibility
+        self.benchmark_plan_by_team = {}  # per-team sampled benchmark tyre-order plan
         self.pending_starting_tyres = True
 
         return self.get_observations()
@@ -90,7 +98,15 @@ class F1TeamEnv:
         
         # Sort cars by race time (leader first)
         sorted_cars = sorted(self.cars, key=lambda x: x["total_race_time"])
-        
+        n = len(sorted_cars)
+        times = np.asarray([c["total_race_time"] for c in sorted_cars], dtype=np.float64)
+        hi = np.searchsorted(times, times + PIT_GAP_WINDOW_SEC, side="right")
+        pit_gap_behind_n_by_pos = np.maximum(hi - np.arange(n, dtype=np.int64) - 1, 0).astype(np.float64) / float(
+            NUM_CARS - 1
+        )
+        # O(1) position lookup (avoid repeated list.index on sorted_cars)
+        pos_by_driver_id = {c["id"]: i for i, c in enumerate(sorted_cars)}
+
         for team in self.teams:
             team_obs = [lap_fraction]
             
@@ -98,8 +114,12 @@ class F1TeamEnv:
             team_cars.sort(key=lambda x: x["id"])
             
             for car in team_cars:
-                pos = sorted_cars.index(car)
-                n = len(sorted_cars)
+                pos = pos_by_driver_id[car["id"]]
+                leader_time = sorted_cars[0]["total_race_time"]
+                gap_to_leader = car["total_race_time"] - leader_time
+                gap_to_leader_n = float(
+                    np.clip(gap_to_leader, -TIMETOWER_CLIP_SEC, TIMETOWER_CLIP_SEC) / TIMETOWER_CLIP_SEC
+                )
                 if pos == 0:
                     gap_ahead = 0.0
                 else:
@@ -108,24 +128,21 @@ class F1TeamEnv:
                     gap_behind = 0.0
                 else:
                     gap_behind = sorted_cars[pos + 1]["total_race_time"] - car["total_race_time"]
-                gap_ahead_n = np.clip(gap_ahead, -30.0, 30.0) / 30.0
-                gap_behind_n = np.clip(gap_behind, -30.0, 30.0) / 30.0
+                gap_ahead_n = float(np.clip(gap_ahead, -30.0, 30.0) / 30.0)
+                gap_behind_n = float(np.clip(gap_behind, -30.0, 30.0) / 30.0)
+                pit_gap_behind_n = float(pit_gap_behind_n_by_pos[pos])
 
                 team_obs.extend([
                     car["tyre_compound"] / 3.0,
                     car["tyre_age"] / 50.0,
                     car["battery"],
                     float(car["override_unlocked"]),
+                    gap_to_leader_n,
                     gap_ahead_n,
                     gap_behind_n,
+                    pit_gap_behind_n,
+                    float(3 in car["compounds_used"]),
                 ])
-
-            leader_time = sorted_cars[0]["total_race_time"]
-            for c in sorted_cars:
-                gap_to_leader = c["total_race_time"] - leader_time
-                team_obs.append(
-                    float(np.clip(gap_to_leader, -TIMETOWER_CLIP_SEC, TIMETOWER_CLIP_SEC) / TIMETOWER_CLIP_SEC)
-                )
 
             team_obs.append(1.0 if self.pending_starting_tyres else 0.0)
             obs[team] = np.array(team_obs, dtype=np.float32)
@@ -136,9 +153,11 @@ class F1TeamEnv:
         """Apply one lap for `car` given discrete action 0..5 (see ACT_* constants)."""
         base_lap_time = 85.0
         pit_loss_time = 25.0
-        lab_time_std = 0.2
+        lab_time_std = 0.1
 
         a = int(action_index)
+        if a == ACT_PIT_HARD and 3 in car["compounds_used"]:
+            a = ACT_PIT_MEDIUM
         if a <= ACT_PIT_HARD:
             pit_cmd = a + 1  # 1=S, 2=M, 3=H
             pace_cmd = 1     # benchmark uses STD when pitting
@@ -171,16 +190,18 @@ class F1TeamEnv:
             status_mod = 0.9
             if car["status"] != "PIT": car["status"] = "HRV"
         elif pace_cmd == 2:
-            if car["override_unlocked"] and car["battery"] > 0.2:
-                pace_modifier = -1.2
-                car["battery"] -= 0.25
-                status_mod = 1.2
-                if car["status"] != "PIT": car["status"] = "OVR"
-            elif not car["override_unlocked"] and car["battery"] > 0.15:
-                pace_modifier = -0.6
-                car["battery"] -= 0.15
-                status_mod = 1.1
-                if car["status"] != "PIT": car["status"] = "BST"
+            if car["battery"] > 0.15:
+                if car["override_unlocked"] and car["battery"] > 0.2:
+                    pace_modifier = -1.2
+                    car["battery"] -= 0.25
+                    status_mod = 1.2
+                    if car["status"] != "PIT": car["status"] = "OVR"
+                else:
+                    # If overtake is unlocked but battery is not enough for OVR, still run regular boost.
+                    pace_modifier = -0.6
+                    car["battery"] -= 0.15
+                    status_mod = 1.1
+                    if car["status"] != "PIT": car["status"] = "BST"
             else:
                 # Boost requested but not enough charge — same lap as STD
                 status_mod = 1.0
@@ -190,8 +211,8 @@ class F1TeamEnv:
             if car["status"] != "PIT": car["status"] = "STD"
 
         # Tyre model: tyre_wear accumulates; penalty = tyre_wear**3
-        tyre_pace_deltas = {1: -1.2, 2: 0.0, 3: 1.2}
-        tyre_deg_rates = {1: 0.15, 2: 0.08, 3: 0.05}
+        tyre_pace_deltas = {1: -0.8, 2: 0.0, 3: 0.8}
+        tyre_deg_rates = {1: 0.09, 2: 0.06, 3: 0.03}
         compound = car["tyre_compound"]
         car["tyre_wear"] += tyre_deg_rates[compound] * status_mod
         deg_penalty = car["tyre_wear"] ** 3
@@ -209,14 +230,14 @@ class F1TeamEnv:
             defender = grid_order[i-1]
             
             if attacker["total_race_time"] < defender["total_race_time"]:
-                overtake_chance = 0.4
-                if attacker["status"] == "OVR": overtake_chance += 0.4
+                overtake_chance = 0.2
+                if attacker["status"] == "OVR": overtake_chance += 0.5
                 elif attacker["status"] == "BST": overtake_chance += 0.3
-                if defender["status"] in ["OVR", "BST"]: overtake_chance -= 0.2 
+                if defender["status"] in ["OVR", "BST"]: overtake_chance -= 0.15
                     
                 tyre_delta = defender["tyre_age"] - attacker["tyre_age"]
                 overtake_chance += (tyre_delta * 0.05)
-                overtake_chance = max(0.05, min(0.95, overtake_chance))
+                overtake_chance = max(0.00, min(0.95, overtake_chance))
                 
                 if random.random() < overtake_chance:
                     attacker["total_race_time"] += 0.2
@@ -278,9 +299,9 @@ class F1TeamEnv:
         pace_times = []
         for c in self.cars:
             pit_loss = 25.0 if c["status"] == "PIT" else 0.0
-            pace_times.append(c["last_lap_time"] - 0.95 * pit_loss)
+            pace_times.append(c["last_lap_time"] - 0.85 * pit_loss)
         for i, car in enumerate(self.cars):
-            rewards[car["team"]] += (87 - pace_times[i]) / 500.0
+            rewards[car["team"]] += (86.5 - pace_times[i]) / 2000.0
 
         # Position delta among non-pit cars only (ignore pit reordering)
         cars_by_id = {c["id"]: c for c in self.cars}
@@ -295,10 +316,10 @@ class F1TeamEnv:
 
             if current_pos < prev_pos:
                 num_spots_gained = prev_pos - current_pos
-                rewards[team] += num_spots_gained * 0.01
+                rewards[team] += num_spots_gained * 0.001
             elif current_pos > prev_pos:
                 num_spots_lost = current_pos - prev_pos
-                rewards[team] -= num_spots_lost * 0.01
+                rewards[team] -= num_spots_lost * 0.001
 
         progress = self.current_lap / max(1, self.total_laps)
         for car in self.cars:
@@ -307,7 +328,7 @@ class F1TeamEnv:
             if used_cnt < 2:
                 rewards[team] -= 0.03 * (progress ** 2)
             if starting_compound_counts.get(car["id"], 1) < 2 and used_cnt >= 2:
-                rewards[team] += 0.5
+                rewards[team] += 0.20
 
         done = self.current_lap >= self.total_laps
         dones = {team: done for team in self.teams}
@@ -328,35 +349,89 @@ class F1TeamEnv:
         return observations, rewards, dones, infos
 
 
-# Benchmark strategies: 1-stop M(20)->H(40), 2-stop M(25)->M(25)->S(10); ±2 lap random wiggle per pit
+# Benchmark strategies:
+# - 1-stop keeps H longer than M, with random order: MH or HM
+# - 2-stop keeps one short S stint and two equal M stints, with random order: MMS/MSM/SMM
+# Optional ± wiggle is applied to pit timing when fixed_laps=False.
 BENCHMARK_1STOP_PIT_LAP = 21
 BENCHMARK_2STOP_PIT_LAPS = (26, 51)
 BENCHMARK_2STOP_COMPOUNDS = (8, 7)
 BENCHMARK_WIGGLE = 1  # pit lap = base ± random in [0, WIGGLE] (1-2 laps wiggle room)
 
-def get_benchmark_action(env, team, strategy="1stop", fixed_laps=False, random_energy=False):
-    """Fixed 1-stop (M→H) or 2-stop (M→M→S) benchmark; optional ±1 lap wiggle on pit timing.
+def _get_or_sample_benchmark_plan(env, team, strategy, fixed_laps, random_tyre_order):
+    """Sample one benchmark tyre-order plan per team per race and cache it on env."""
+    if not hasattr(env, "benchmark_plan_by_team"):
+        env.benchmark_plan_by_team = {}
+
+    plan = env.benchmark_plan_by_team.get(team)
+    if plan is not None and plan["strategy"] == strategy and plan["fixed_laps"] == fixed_laps and plan["random_tyre_order"] == random_tyre_order:
+        return plan
+
+    if strategy == "1stop":
+        order = random.choice(("MH", "HM")) if random_tyre_order else "MH"
+        if order == "MH":
+            base_pit_laps = (BENCHMARK_1STOP_PIT_LAP,)  # M20 -> H40
+            start_compound = 2
+            pit_cmds = (9,)  # pit to hard
+        else:
+            # H40 -> M20 (for 60 laps this is lap 41; formula keeps last stint 20 laps)
+            base_pit_laps = (max(2, env.total_laps - 20 + 1),)
+            start_compound = 3
+            pit_cmds = (8,)  # pit to medium
+    else:
+        order = random.choice(("MMS", "MSM", "SMM")) if random_tyre_order else "MMS"
+        if order == "MMS":
+            base_pit_laps = BENCHMARK_2STOP_PIT_LAPS  # 25,25,10
+            start_compound = 2
+            pit_cmds = BENCHMARK_2STOP_COMPOUNDS  # M then S
+        elif order == "MSM":
+            base_pit_laps = (26, 36)  # 25,10,25
+            start_compound = 2
+            pit_cmds = (7, 8)  # S then M
+        else:  # SMM
+            base_pit_laps = (11, 36)  # 10,25,25
+            start_compound = 1
+            pit_cmds = (8, 8)  # M then M
+
+    if fixed_laps:
+        pit_laps = base_pit_laps
+    else:
+        ws = [random.randint(-BENCHMARK_WIGGLE, BENCHMARK_WIGGLE) for _ in base_pit_laps]
+        pit_laps = []
+        for i, base in enumerate(base_pit_laps):
+            lap = base + ws[i]
+            if i > 0:
+                lap = max(lap, pit_laps[-1] + 1)
+            lap = min(max(2, lap), env.total_laps)
+            pit_laps.append(lap)
+        pit_laps = tuple(pit_laps)
+
+    plan = {
+        "strategy": strategy,
+        "fixed_laps": fixed_laps,
+        "random_tyre_order": random_tyre_order,
+        "order": order,
+        "start_action": start_compound - 1,  # action index for pending_starting_tyres
+        "pit_laps": pit_laps,
+        "pit_cmds": pit_cmds,
+    }
+    env.benchmark_plan_by_team[team] = plan
+    return plan
+
+
+def get_benchmark_action(
+    env, team, strategy="1stop", fixed_laps=False, random_energy=False, random_tyre_order=False
+):
+    """Benchmark policy with optional randomized tyre order while preserving stint-length rules.
 
     By default, stay-out laps use **standard** pace only (MODE column stays STD). Set
     ``random_energy=True`` to sample Harvest / Boost / Standard on those laps (for viz / stress tests).
     """
-    if fixed_laps:
-        pit_laps = (BENCHMARK_1STOP_PIT_LAP,) if strategy == "1stop" else BENCHMARK_2STOP_PIT_LAPS
-    else:
-        if not hasattr(env, "benchmark_pit_wiggles"):
-            env.benchmark_pit_wiggles = {}
-        if team not in env.benchmark_pit_wiggles:
-            if strategy == "1stop":
-                w = random.randint(-BENCHMARK_WIGGLE, BENCHMARK_WIGGLE)
-                env.benchmark_pit_wiggles[team] = (BENCHMARK_1STOP_PIT_LAP + w,)
-            else:
-                w1 = random.randint(-BENCHMARK_WIGGLE, BENCHMARK_WIGGLE)
-                w2 = random.randint(-BENCHMARK_WIGGLE, BENCHMARK_WIGGLE)
-                env.benchmark_pit_wiggles[team] = (
-                    BENCHMARK_2STOP_PIT_LAPS[0] + w1,
-                    BENCHMARK_2STOP_PIT_LAPS[1] + w2,
-                )
-        pit_laps = env.benchmark_pit_wiggles[team]
+    plan = _get_or_sample_benchmark_plan(env, team, strategy, fixed_laps, random_tyre_order)
+
+    if env.pending_starting_tyres:
+        a0 = int(plan["start_action"])
+        return np.array([a0, a0], dtype=np.int32)
 
     team_cars = sorted([c for c in env.cars if c["team"] == team], key=lambda c: c["id"])
     next_lap = env.current_lap + 1
@@ -365,12 +440,12 @@ def get_benchmark_action(env, team, strategy="1stop", fixed_laps=False, random_e
         pace = 1
         pit_cmd = 0
         pits_done = car["pit_stops"]
-        if strategy == "1stop":
-            if pits_done == 0 and next_lap >= pit_laps[0]:
-                pit_cmd = 9  # Hard
-        else:
-            if pits_done < len(pit_laps) and next_lap >= pit_laps[pits_done]:
-                pit_cmd = BENCHMARK_2STOP_COMPOUNDS[pits_done]
+        pit_laps = plan["pit_laps"]
+        pit_cmds = plan["pit_cmds"]
+        if pits_done < len(pit_laps) and next_lap >= pit_laps[pits_done]:
+            pit_cmd = pit_cmds[pits_done]
+        if pit_cmd == 9 and 3 in car["compounds_used"]:
+            pit_cmd = 8  # medium if hard already used (e.g. started on hard)
         a = encode_pace_pit_to_action(pace, pit_cmd)
         if random_energy and a >= ACT_STAY_HRV:
             a = random.randint(ACT_STAY_HRV, ACT_STAY_STD)

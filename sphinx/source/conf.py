@@ -4,7 +4,9 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
+_conf_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_root = os.path.abspath(os.path.join(_conf_dir, "..", ".."))
+sys.path.insert(0, _repo_root)
 
 project = "Formula Mar1"
 copyright = "2026, Jan A. Krzywda"

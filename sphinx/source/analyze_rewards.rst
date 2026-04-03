@@ -1,7 +1,7 @@
-analyze\_rewards module
-=======================
+analysis.analyze\_rewards module
+================================
 
-.. automodule:: analyze_rewards
+.. automodule:: analysis.analyze_rewards
    :members:
    :undoc-members:
    :show-inheritance:

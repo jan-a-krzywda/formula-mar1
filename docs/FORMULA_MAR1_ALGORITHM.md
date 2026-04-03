@@ -105,7 +105,7 @@ Each lap:
 \text{lap\_time} = 85 + \Delta_{\text{compound}}(\text{tyre}) + (\text{tyre\_wear})^3 + \Delta_{\text{pace}} + \mathcal{N}(0, 0.2^2) + \text{pit\_loss}
 \]
 
-- **Compound offset:** Soft faster, Hard slower (see `tyre_pace_deltas` in `env.py`).
+- **Compound offset:** Soft faster, Hard slower (see `tyre_pace_deltas` in `formula_mar1/env.py`).
 - **Wear:** Accumulates per lap; penalty is **cubic** in wear — rewards managing deg.
 - **Pace modes:** Harvest adds positive modifier (slower); Boost subtracts (faster) if battery allows; else falls back to standard-like behaviour.
 - **Pit:** Adds ~25s pit loss when the action is a pit stop.
@@ -142,7 +142,7 @@ r_{\text{pace, car}} = \frac{87 - \text{pace\_time}_{\text{adjusted}}}{500}
 
 **Additional terms:**
 
-- **Position change** (non-pit cars only): ±0.01 per position gained/lost vs start of step (values in code—confirm `env.py` if tuning).
+- **Position change** (non-pit cars only): ±0.01 per position gained/lost vs start of step (values in code—confirm `formula_mar1/env.py` if tuning).
 - **Compound rule:** progress-shaped penalty; **+0.5** when a car first satisfies two compounds.
 - **End of episode:** DQ **−10** or sum of **position weights** in `np.linspace(1, -1, 22)` for the two cars’ finishing positions.
 
@@ -152,7 +152,7 @@ r_{\text{pace, car}} = \frac{87 - \text{pace\_time}_{\text{adjusted}}}{500}
 
 ## 8. Learning algorithm
 
-### 8.1 Architecture (`networks.py`)
+### 8.1 Architecture (`formula_mar1/networks.py`)
 
 - **Input:** `LayerNorm` on 14-dim observation.
 - **Trunk:** Dense 128 → residual block ×2 → Dense 64.
@@ -165,13 +165,13 @@ r_{\text{pace, car}} = \frac{87 - \text{pace\_time}_{\text{adjusted}}}{500}
 - Includes **starting-tyre** transition (medium, medium) to match BC labels.
 - Produces a warm start saved as `f1_best_weights.pkl` before PPO.
 
-### 8.3 PPO (`ppo.py`, `train.py`)
+### 8.3 PPO (`formula_mar1/ppo.py`, `formula_mar1/train.py`)
 
 - **Rollouts:** `VecF1Env` runs **N** parallel races; multiple **rounds** per update increase batch size.
 - **Horizon:** `T = total_laps + 1` steps (includes tyre step).
 - **GAE:** `compute_gae_batched` with configurable `gamma`, `lambda`.
 - **Update:** Clipped surrogate; **advantages normalized** per batch; value loss MSE; **entropy bonus** with linear decay across training.
-- **Optimizer:** Adam with learning rate from `train.py`.
+- **Optimizer:** Adam with learning rate from `formula_mar1/train.py`.
 
 ### 8.4 Evaluation
 
@@ -184,13 +184,13 @@ r_{\text{pace, car}} = \frac{87 - \text{pace\_time}_{\text{adjusted}}}{500}
 
 | File | Role |
 |------|------|
-| `env.py` | `F1TeamEnv`, rewards, tyre step, benchmarks |
-| `vec_env.py` | Parallel envs, BlueCow actions + scripted others |
-| `networks.py` | Flax `F1AgentNN` |
-| `ppo.py` | GAE, PPO loss, logit masking |
-| `train.py` | BC + PPO loop, eval, checkpoints |
+| `formula_mar1/env.py` | `F1TeamEnv`, rewards, tyre step, benchmarks |
+| `formula_mar1/vec_env.py` | Parallel envs, BlueCow actions + scripted others |
+| `formula_mar1/networks.py` | Flax `F1AgentNN` |
+| `formula_mar1/ppo.py` | GAE, PPO loss, logit masking |
+| `formula_mar1/train.py` | BC + PPO loop, eval, checkpoints |
 | `evaluate.py` | Visual / GIF evaluation |
-| `analyze_rewards.py` | Per-lap telemetry plots |
+| `analysis/analyze_rewards.py` | Per-lap telemetry plots |
 
 *Class / function reference (Sphinx):* [**Module index**](https://jan-a-krzywda.github.io/formula-mar1/py-modindex.html) · [Index](https://jan-a-krzywda.github.io/formula-mar1/genindex.html).
 
@@ -253,7 +253,7 @@ flowchart LR
 
 ## 11. Other illustrative ideas (non-Mermaid)
 
-1. **Telemetry screenshot** — Terminal board from `render_utils.py` showing MODE (HRV/BST/OVR/STD), tyre, battery bars.
+1. **Telemetry screenshot** — Terminal board from `formula_mar1/render_utils.py` showing MODE (HRV/BST/OVR/STD), tyre, battery bars.
 2. **Stacked area chart** — Decompose mean episode return into pace / position / compound / terminal (requires logging components separately—currently combined).
 3. **Heatmap** — Pit lap vs final position over many seeds for the benchmark vs learned policy.
 4. **TensorBoard** — `Training/Mean_Reward_EMA`, `Eval/EMA`, policy/value loss curves after stabilizing hyperparameters.
@@ -261,7 +261,7 @@ flowchart LR
 
 ---
 
-## 12. Hyperparameters (reference — verify `train.py`)
+## 12. Hyperparameters (reference — verify `formula_mar1/train.py`)
 
 These are **typical** values; the source of truth is always the code:
 

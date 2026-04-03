@@ -1,14 +1,21 @@
 """Plot per-lap signals vs cumulative return for a few episodes (needs matplotlib)."""
+import sys
+from pathlib import Path
+
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 import os
-import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import jax
 import jax.numpy as jnp
 
-from env import F1TeamEnv, get_benchmark_action
-from networks import F1AgentNN
-from ppo import mask_pit_logits
+from formula_mar1.env import F1TeamEnv, get_benchmark_action
+from formula_mar1.networks import F1AgentNN
+from formula_mar1.ppo import mask_pit_logits
+from formula_mar1.checkpoint_utils import load_compatible_params
 
 
 def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_action_fn=None):
@@ -17,7 +24,6 @@ def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_
     laps = []
     cumulative = 0.0
 
-    others = [t for t in env.teams if t != focal_team]
     while env.pending_starting_tyres or env.current_lap < env.total_laps:
         actions = {}
         for team in env.teams:
@@ -28,7 +34,8 @@ def run_episode(env, focal_team="BlueCow", seed=None, agent_params=None, greedy_
             elif env.pending_starting_tyres:
                 actions[team] = np.array([1, 1], dtype=np.int32)  # medium for benchmarks
             else:
-                strategy = "1stop" if others.index(team) % 2 == 0 else "2stop"
+                # Use index in full grid order so focal_team is included (others excluded BlueCow → crash).
+                strategy = "1stop" if env.teams.index(team) % 2 == 0 else "2stop"
                 actions[team] = get_benchmark_action(env, team, strategy)
         obs_dict, rewards, dones, infos = env.step(actions)
 
@@ -86,13 +93,22 @@ def main():
     env = F1TeamEnv(total_laps=60)
 
     # Load best trained PPO agent if available
-    weight_file = "f1_best_weights.pkl" if os.path.exists("f1_best_weights.pkl") else "f1_trained_weights.pkl"
     model = F1AgentNN()
     agent_params = None
     greedy_action_fn = None
-    if os.path.exists(weight_file):
-        with open(weight_file, "rb") as f:
-            agent_params = pickle.load(f)
+    candidate_weights = [
+        "f1_best_weights.pkl",
+        "f1_best_weights_good_enough.pkl",
+        "f1_trained_weights_good.pkl",
+        "f1_trained_weights.pkl",
+        "learning_curve_best_agent.pkl",
+    ]
+    for fname in sorted(os.listdir(".")):
+        if fname.endswith(".pkl"):
+            candidate_weights.append(fname)
+    candidate_weights = list(dict.fromkeys(candidate_weights))
+    try:
+        agent_params, weight_file = load_compatible_params(model, candidate_weights)
 
         @jax.jit
         def greedy_action_fn(params, obs_array):
@@ -102,8 +118,11 @@ def main():
             a2 = jnp.argmax(logits_tuple[1], axis=-1)[0]
             return jnp.array([a1, a2], dtype=jnp.int32)
         print(f"Loaded {weight_file} (PPO) for {focal_team}.")
-    else:
+    except FileNotFoundError:
         print("No weight file found; focal team uses benchmark like other teams.")
+    except RuntimeError as e:
+        print(str(e))
+        print("Proceeding with benchmark-only focal team.")
 
     episodes = []
     for ep in range(num_episodes):

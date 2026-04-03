@@ -1,30 +1,43 @@
 import jax
 import jax.numpy as jnp
-import pickle
 import time
 import random
 import numpy as np
 import csv
 import os
 
-from env import F1TeamEnv, get_benchmark_action
-from networks import F1AgentNN
-from ppo import mask_pit_logits
-import render_utils
+from formula_mar1.env import F1TeamEnv, get_benchmark_action
+from formula_mar1.networks import F1AgentNN
+from formula_mar1.ppo import mask_pit_logits
+from formula_mar1 import render_utils
+from formula_mar1.checkpoint_utils import load_compatible_params
 
 
 def main():
     env = F1TeamEnv(total_laps=60)
     model = F1AgentNN()
 
-    weight_file = "f1_best_weights.pkl" if os.path.exists("f1_best_weights.pkl") else "f1_trained_weights.pkl"
     print("Loading trained AI weights...")
+    candidate_weights = [
+        "f1_best_weights.pkl",
+        "f1_bc_weights.pkl",
+        "f1_best_weights_good_enough.pkl",
+        "f1_trained_weights_good.pkl",
+        "f1_trained_weights.pkl",
+        "learning_curve_best_agent.pkl",
+    ]
+    for fname in sorted(os.listdir(".")):
+        if fname.endswith(".pkl"):
+            candidate_weights.append(fname)
+    candidate_weights = list(dict.fromkeys(candidate_weights))
     try:
-        with open(weight_file, "rb") as f:
-            trained_params = pickle.load(f)
+        trained_params, weight_file = load_compatible_params(model, candidate_weights)
         print(f"Weights loaded successfully from '{weight_file}'!")
     except FileNotFoundError:
         print("Error: Could not find any weight files. Run train.py first.")
+        return
+    except RuntimeError as e:
+        print(str(e))
         return
 
     @jax.jit
@@ -35,17 +48,22 @@ def main():
         a2 = jnp.argmax(logits_tuple[1], axis=-1)[0]
         return jnp.array([a1, a2], dtype=jnp.int32)
 
-    all_teams = env.teams
-    baseline_teams = random.sample(all_teams, 5)
-    ai_teams = [t for t in all_teams if t not in baseline_teams]
-    baseline_strategy = {t: ("1stop" if i % 2 == 0 else "2stop") for i, t in enumerate(baseline_teams)}
+    # Single agent team (matches train.py / VecF1Env: policy is trained for BlueCow only).
+    ai_team = "BlueCow"
+    ai_teams = [ai_team]
+    baseline_teams = [t for t in env.teams if t != ai_team]
+    n_base = len(baseline_teams)
+    n_one = n_base // 2
+    strat_labels = ["1stop"] * n_one + ["2stop"] * (n_base - n_one)
+    random.shuffle(strat_labels)
+    baseline_strategy = {t: strat_labels[i] for i, t in enumerate(baseline_teams)}
 
     print("\n" + "="*50)
     print("🏎️ THE GRID IS SET")
     print("="*50)
-    print(f"🧠 AI Controlled (6, Yellow): {', '.join(ai_teams)}")
-    print(f"📊 Baseline (5, White): {', '.join(baseline_teams)}")
-    print("   Strategies: " + ", ".join(f"{t}({s})" for t, s in baseline_strategy.items()))
+    print(f"🧠 AI Controlled (1, Yellow): {ai_team}")
+    print(f"📊 Baseline ({n_base}, White): {', '.join(baseline_teams)}")
+    print("   Strategies: " + ", ".join(f"{t}({s})" for t, s in sorted(baseline_strategy.items())))
     print("="*50 + "\n")
 
     frames = []
@@ -53,12 +71,13 @@ def main():
         font = render_utils.get_monospace_font(14)
 
     telemetry_log = {car["id"]: [] for car in env.cars}
-        
+    episode_reward = 0.0
+
     print("🟢 LIGHTS OUT! Watch the AI navigate through the baseline traffic...")
     time.sleep(3)
-    
+
     obs_dict = env.reset()
-    
+
     while env.pending_starting_tyres or env.current_lap < env.total_laps:
         all_actions = {}
         
@@ -68,14 +87,19 @@ def main():
                 action_array = greedy_action(trained_params, team_obs)
                 all_actions[team] = np.array(action_array)
             elif env.pending_starting_tyres:
-                all_actions[team] = np.array([1, 1], dtype=np.int32)  # medium (matches scripted baseline)
+                # Match analyze_rewards.py: benchmark teams start on medium/medium.
+                all_actions[team] = np.array([1, 1], dtype=np.int32)
             else:
-                # Benchmark pit strategy only; energy mode is random HRV/BST/STD so MODE updates in telemetry
+                # Same as training eval: STD on stay-out laps (no random_energy).
                 all_actions[team] = get_benchmark_action(
-                    env, team, baseline_strategy[team], random_energy=True
+                    env,
+                    team,
+                    baseline_strategy[team],
+                    random_tyre_order=True,
                 )
             
-        obs_dict, _, _, _ = env.step(all_actions)
+        obs_dict, step_rewards, _, _ = env.step(all_actions)
+        episode_reward += float(step_rewards[ai_team])
 
         leader_time = env.cars[0]["total_race_time"]
         for i, car in enumerate(env.cars):
@@ -101,10 +125,21 @@ def main():
         
     print("\n🏁 CHEQUERED FLAG! 🏁")
 
+    # env.cars sorted by total_race_time: index 0 = race winner
+    ai_positions = [i + 1 for i, c in enumerate(env.cars) if c["team"] == ai_team]
+    ai_best_pos = min(ai_positions)
+    ai_worst_pos = max(ai_positions)
+
     winner_car = env.cars[0]
     winner_id = winner_car["id"]
     winner_team = winner_car["team"]
-    
+
+    print(
+        f"📈 Episode reward ({ai_team}, sum of env.step rewards — same metric as train.py eval): "
+        f"{episode_reward:.4f}"
+    )
+    print(f"📍 {ai_team} finish: best car P{ai_best_pos}, other car P{ai_worst_pos} (of 22)")
+
     if winner_team in ai_teams:
         print(f"🏆 The Trained AI ({winner_id} - {winner_team}) wins the race!")
     else:
@@ -166,6 +201,16 @@ def main():
             loop=0
         )
         print("🎥 Saved to 'f1_2026_crossplay_eval.gif'!")
+
+    return {
+        "episode_reward": episode_reward,
+        "ai_team": ai_team,
+        "ai_best_pos": ai_best_pos,
+        "ai_worst_pos": ai_worst_pos,
+        "winner_team": winner_team,
+        "weight_file": weight_file,
+    }
+
 
 if __name__ == "__main__":
     main()

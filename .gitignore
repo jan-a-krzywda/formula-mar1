@@ -24,3 +24,10 @@ build/
 
 
 events*
+
+# Training / evaluation outputs (regenerate locally)
+*.pkl
+!f1_best_weights.pkl
+full_race_telemetry.csv
+f1_2026_crossplay_eval.gif
+runs/

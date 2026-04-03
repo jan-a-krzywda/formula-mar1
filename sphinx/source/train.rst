@@ -1,7 +1,7 @@
 train module
 ============
 
-.. automodule:: train
+.. automodule:: formula_mar1.train
    :members:
    :undoc-members:
    :show-inheritance:

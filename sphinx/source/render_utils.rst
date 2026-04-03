@@ -1,7 +1,7 @@
 render\_utils module
 ====================
 
-.. automodule:: render_utils
+.. automodule:: formula_mar1.render_utils
    :members:
    :undoc-members:
    :show-inheritance:

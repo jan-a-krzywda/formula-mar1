@@ -1,7 +1,7 @@
 networks module
 ===============
 
-.. automodule:: networks
+.. automodule:: formula_mar1.networks
    :members:
    :undoc-members:
    :show-inheritance:
