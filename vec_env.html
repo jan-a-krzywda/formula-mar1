@@ -1,0 +1,156 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>vec_env module &mdash; Formula Mar1 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://jan-a-krzywda.github.io/formula-mar1/vec_env.html" />
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="train module" href="train.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Formula Mar1
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">Python API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="analyze_rewards.html">analysis.analyze_rewards module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="env.html">env module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="evaluate.html">evaluate module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="main.html">main module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="networks.html">networks module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ppo.html">ppo module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="render_utils.html">render_utils module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="train.html">train module</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">vec_env module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#formula_mar1.vec_env.VecF1Env"><code class="docutils literal notranslate"><span class="pre">VecF1Env</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#formula_mar1.vec_env.VecF1Env.close"><code class="docutils literal notranslate"><span class="pre">VecF1Env.close()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#formula_mar1.vec_env.VecF1Env.reset"><code class="docutils literal notranslate"><span class="pre">VecF1Env.reset()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#formula_mar1.vec_env.VecF1Env.step"><code class="docutils literal notranslate"><span class="pre">VecF1Env.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Formula Mar1</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">Python API</a></li>
+      <li class="breadcrumb-item active">vec_env module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/vec_env.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-formula_mar1.vec_env">
+<span id="vec-env-module"></span><h1>vec_env module<a class="headerlink" href="#module-formula_mar1.vec_env" title="Link to this heading"></a></h1>
+<p>Vectorized F1 env: N independent envs with serial or process backend.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="formula_mar1.vec_env.VecF1Env">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">formula_mar1.vec_env.</span></span><span class="sig-name descname"><span class="pre">VecF1Env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_envs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_laps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'serial'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'spawn'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/formula_mar1/vec_env.html#VecF1Env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#formula_mar1.vec_env.VecF1Env" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Runs N independent F1TeamEnv instances.</p>
+<p>backend=”serial”: single-process Python loop (old behavior).
+backend=”process”: one worker process per env for CPU parallelism.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="formula_mar1.vec_env.VecF1Env.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/formula_mar1/vec_env.html#VecF1Env.close"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#formula_mar1.vec_env.VecF1Env.close" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="formula_mar1.vec_env.VecF1Env.reset">
+<span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/formula_mar1/vec_env.html#VecF1Env.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#formula_mar1.vec_env.VecF1Env.reset" title="Link to this definition"></a></dt>
+<dd><p>Reset all envs. Returns BlueCow obs array (num_envs, TEAM_OBS_DIM).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="formula_mar1.vec_env.VecF1Env.step">
+<span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bluecow_actions</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/formula_mar1/vec_env.html#VecF1Env.step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#formula_mar1.vec_env.VecF1Env.step" title="Link to this definition"></a></dt>
+<dd><p>bluecow_actions: (num_envs, 2) int array — discrete action per car (0..5).
+Returns: obs (num_envs, TEAM_OBS_DIM), rewards (num_envs,), dones (num_envs,).</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="train.html" class="btn btn-neutral float-left" title="train module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Jan A. Krzywda.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,702 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>formula_mar1.train &mdash; Formula Mar1 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="canonical" href="https://jan-a-krzywda.github.io/formula-mar1/_modules/formula_mar1/train.html" />
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=2709fde1"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Formula Mar1
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">Python API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Formula Mar1</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">formula_mar1.train</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for formula_mar1.train</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">optax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensorboardX</span><span class="w"> </span><span class="kn">import</span> <span class="n">SummaryWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">flax.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">freeze</span><span class="p">,</span> <span class="n">unfreeze</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.env</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">F1TeamEnv</span><span class="p">,</span>
+    <span class="n">get_benchmark_action</span><span class="p">,</span>
+    <span class="n">TEAM_OBS_DIM</span><span class="p">,</span>
+    <span class="n">ACT_PIT_SOFT</span><span class="p">,</span>
+    <span class="n">ACT_PIT_MEDIUM</span><span class="p">,</span>
+    <span class="n">ACT_PIT_HARD</span><span class="p">,</span>
+    <span class="n">ACT_STAY_HRV</span><span class="p">,</span>
+    <span class="n">ACT_STAY_STD</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.vec_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">VecF1Env</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.networks</span><span class="w"> </span><span class="kn">import</span> <span class="n">F1AgentNN</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ppo</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_gae_batched</span><span class="p">,</span> <span class="n">ppo_update</span><span class="p">,</span> <span class="n">mask_pit_logits</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_episode_discounted_returns</span><span class="p">(</span><span class="n">rew_segment</span><span class="p">,</span> <span class="n">gamma</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Monte Carlo return G_t from per-step rewards (episodic, undiscounted tail = 0).&quot;&quot;&quot;</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rew_segment</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+        <span class="n">g</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rew_segment</span><span class="p">[</span><span class="n">t</span><span class="p">])</span> <span class="o">+</span> <span class="n">gamma</span> <span class="o">*</span> <span class="n">g</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="n">g</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_random_starting_tyres_pair</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pre-race action: Soft/Med/Hard per car (indices 0–2), uniform i.i.d.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">ACT_PIT_SOFT</span><span class="p">,</span> <span class="n">ACT_PIT_HARD</span><span class="p">),</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">ACT_PIT_SOFT</span><span class="p">,</span> <span class="n">ACT_PIT_HARD</span><span class="p">)],</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="random_baseline_strategies_by_team">
+<a class="viewcode-back" href="../../train.html#formula_mar1.train.random_baseline_strategies_by_team">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">random_baseline_strategies_by_team</span><span class="p">(</span><span class="n">eval_env</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Map each non-BlueCow team to a benchmark pit strategy (1-stop M→H vs 2-stop M→M→S).</span>
+<span class="sd">    Shuffles who runs which each call so eval games see a random mix instead of fixed team order.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">others</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">teams</span> <span class="k">if</span> <span class="n">t</span> <span class="o">!=</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">others</span><span class="p">)</span>
+    <span class="n">n_one</span> <span class="o">=</span> <span class="n">n</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;1stop&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_one</span> <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;2stop&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="n">n_one</span><span class="p">)</span>
+    <span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">team</span><span class="p">:</span> <span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">team</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">others</span><span class="p">)}</span></div>
+
+
+
+<div class="viewcode-block" id="pretrain_with_heuristic">
+<a class="viewcode-back" href="../../train.html#formula_mar1.train.pretrain_with_heuristic">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pretrain_with_heuristic</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">init_params</span><span class="p">,</span> <span class="n">total_laps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">bc_seed</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;BC: imitate mixed 1-stop/2-stop benchmark; mix HRV/Boost/STD on stay-out steps so all action modes appear.&quot;&quot;&quot;</span>
+    <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">bc_seed</span><span class="p">)</span>
+    <span class="n">bc_env</span> <span class="o">=</span> <span class="n">F1TeamEnv</span><span class="p">(</span><span class="n">total_laps</span><span class="o">=</span><span class="n">total_laps</span><span class="p">)</span>
+    <span class="n">others</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">teams</span> <span class="k">if</span> <span class="n">t</span> <span class="o">!=</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span>
+
+    <span class="n">obs_list</span><span class="p">,</span> <span class="n">act_list</span><span class="p">,</span> <span class="n">rew_list</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">episode_lengths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">ep</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_BC_EPISODES</span><span class="p">):</span>
+        <span class="n">hero_strategy</span> <span class="o">=</span> <span class="s2">&quot;2stop&quot;</span> <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">BC_HERO_2STOP_PROB</span> <span class="k">else</span> <span class="s2">&quot;1stop&quot;</span>
+        <span class="n">obs_dict</span> <span class="o">=</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">ep</span> <span class="o">+</span> <span class="n">bc_seed</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="n">blue_start</span> <span class="o">=</span> <span class="n">_random_starting_tyres_pair</span><span class="p">()</span>
+        <span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_dict</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">act_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">blue_start</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">actions_start</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">teams</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">:</span>
+                <span class="n">actions_start</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">blue_start</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">actions_start</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">_random_starting_tyres_pair</span><span class="p">()</span>
+        <span class="n">obs_dict</span><span class="p">,</span> <span class="n">rewards</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">actions_start</span><span class="p">)</span>
+        <span class="n">rew_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">rewards</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]))</span>
+        <span class="n">n_steps</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">while</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">current_lap</span> <span class="o">&lt;</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">total_laps</span><span class="p">:</span>
+            <span class="n">actions</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">teams</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">:</span>
+                    <span class="n">raw</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                        <span class="n">bc_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">hero_strategy</span><span class="p">,</span> <span class="n">fixed_laps</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+                    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">a</span><span class="p">[</span><span class="n">slot</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">ACT_STAY_HRV</span> <span class="ow">and</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">BC_ENERGY_MIX_PROB</span><span class="p">:</span>
+                            <span class="n">a</span><span class="p">[</span><span class="n">slot</span><span class="p">]</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">ACT_STAY_HRV</span><span class="p">,</span> <span class="n">ACT_STAY_STD</span><span class="p">)</span>
+                    <span class="n">actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">a</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">strategy</span> <span class="o">=</span> <span class="s2">&quot;1stop&quot;</span> <span class="k">if</span> <span class="n">others</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">team</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;2stop&quot;</span>
+                    <span class="n">actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                        <span class="n">bc_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">fixed_laps</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+            <span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_dict</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="n">act_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">actions</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="n">obs_dict</span><span class="p">,</span> <span class="n">rewards</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">bc_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+            <span class="n">rew_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">rewards</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]))</span>
+            <span class="n">n_steps</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">episode_lengths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_steps</span><span class="p">)</span>
+
+    <span class="n">ret_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">off</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">L</span> <span class="ow">in</span> <span class="n">episode_lengths</span><span class="p">:</span>
+        <span class="n">seg</span> <span class="o">=</span> <span class="n">rew_list</span><span class="p">[</span><span class="n">off</span> <span class="p">:</span> <span class="n">off</span> <span class="o">+</span> <span class="n">L</span><span class="p">]</span>
+        <span class="n">ret_list</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">_episode_discounted_returns</span><span class="p">(</span><span class="n">seg</span><span class="p">,</span> <span class="n">GAMMA</span><span class="p">))</span>
+        <span class="n">off</span> <span class="o">+=</span> <span class="n">L</span>
+
+    <span class="n">obs_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obs_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">act_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">act_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">ret_list</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_list</span><span class="p">)</span>
+
+    <span class="n">pit_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">act_arr</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">act_arr</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">pit_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">pit_mask</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">BC_PIT_OVERSAMPLE</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">pit_indices</span><span class="p">:</span>
+            <span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_arr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="n">act_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">act_arr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="n">ret_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ret_list</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">obs_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obs_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">act_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">act_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">ret_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ret_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">n_data</span> <span class="o">=</span> <span class="n">obs_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;BC: collected </span><span class="si">{}</span><span class="s2"> (obs, action, return) pairs (</span><span class="si">{}</span><span class="s2"> pit steps oversampled </span><span class="si">{}</span><span class="s2">x) from </span><span class="si">{}</span><span class="s2"> episodes.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+        <span class="n">n_data</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">pit_indices</span><span class="p">),</span> <span class="n">BC_PIT_OVERSAMPLE</span><span class="p">,</span> <span class="n">NUM_BC_EPISODES</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">bc_loss</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">obs_b</span><span class="p">,</span> <span class="n">a2_b</span><span class="p">,</span> <span class="n">ret_b</span><span class="p">):</span>
+        <span class="n">logits_tuple</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">({</span><span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">p</span><span class="p">},</span> <span class="n">obs_b</span><span class="p">)</span>
+        <span class="n">logits_tuple</span> <span class="o">=</span> <span class="n">mask_pit_logits</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">,</span> <span class="n">obs_b</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">policy_loss</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">logits</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">):</span>
+            <span class="n">log_p</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+            <span class="n">neg_log_p</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_p</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">a2_b</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]]</span>
+            <span class="n">w</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">a2_b</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">BC_PIT_LOSS_WEIGHT</span><span class="p">,</span>
+                <span class="mf">1.0</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_loss</span> <span class="o">+=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">w</span> <span class="o">*</span> <span class="n">neg_log_p</span><span class="p">)</span>
+        <span class="n">ret_mean</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">ret_b</span><span class="p">)</span>
+        <span class="n">ret_std</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">ret_b</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span>
+        <span class="n">ret_n</span> <span class="o">=</span> <span class="p">(</span><span class="n">ret_b</span> <span class="o">-</span> <span class="n">ret_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">ret_std</span>
+        <span class="n">value_loss</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">ret_n</span> <span class="o">-</span> <span class="n">values</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">policy_loss</span> <span class="o">+</span> <span class="n">BC_VALUE_COEF</span> <span class="o">*</span> <span class="n">value_loss</span>
+
+    <span class="n">grad_fn</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">jit</span><span class="p">(</span><span class="n">jax</span><span class="o">.</span><span class="n">value_and_grad</span><span class="p">(</span><span class="n">bc_loss</span><span class="p">))</span>
+    <span class="n">bc_opt</span> <span class="o">=</span> <span class="n">optax</span><span class="o">.</span><span class="n">adam</span><span class="p">(</span><span class="n">BC_LR</span><span class="p">)</span>
+    <span class="n">opt_state</span> <span class="o">=</span> <span class="n">bc_opt</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">init_params</span><span class="p">)</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">init_params</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="n">bc_seed</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_BC_EPOCHS</span><span class="p">):</span>
+        <span class="n">perm</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">rng</span><span class="p">,</span> <span class="n">n_data</span><span class="p">)</span>
+        <span class="n">rng</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
+        <span class="n">epoch_loss</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">n_batches</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_data</span><span class="p">,</span> <span class="n">BC_BATCH_SIZE</span><span class="p">):</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">BC_BATCH_SIZE</span><span class="p">,</span> <span class="n">n_data</span><span class="p">)</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">perm</span><span class="p">)[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="n">obs_b</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obs_arr</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            <span class="n">a2_b</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">act_arr</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            <span class="n">ret_b</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ret_arr</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            <span class="n">loss_val</span><span class="p">,</span> <span class="n">grads</span> <span class="o">=</span> <span class="n">grad_fn</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">obs_b</span><span class="p">,</span> <span class="n">a2_b</span><span class="p">,</span> <span class="n">ret_b</span><span class="p">)</span>
+            <span class="n">updates</span><span class="p">,</span> <span class="n">opt_state</span> <span class="o">=</span> <span class="n">bc_opt</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">optax</span><span class="o">.</span><span class="n">apply_updates</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">updates</span><span class="p">)</span>
+            <span class="n">epoch_loss</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">loss_val</span><span class="p">)</span>
+            <span class="n">n_batches</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  BC epoch </span><span class="si">{}</span><span class="s2"> loss: </span><span class="si">{:.4f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">epoch</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">epoch_loss</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_batches</span><span class="p">)))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;BC pretraining done. Policy + critic fit to benchmark trajectories (BC + discounted-return value loss).&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">params</span></div>
+
+
+<span class="c1"># ============== PPO training (single place to tune) ==============</span>
+<span class="c1"># Training length</span>
+<span class="n">TOTAL_PPO_UPDATES</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># total PPO updates; each update = ROLLOUT_ROUNDS × NUM_ENVS episodes</span>
+<span class="n">EVAL_EVERY</span> <span class="o">=</span> <span class="mi">50</span>           <span class="c1"># run greedy eval every N updates and maybe save best</span>
+
+<span class="c1"># Batch config: more rollouts + PPO epochs → lower-variance gradients (less jumpy curves)</span>
+<span class="n">VEC_ENV_BACKEND</span> <span class="o">=</span> <span class="s2">&quot;process&quot;</span>  <span class="c1"># &quot;serial&quot; or &quot;process&quot;</span>
+<span class="n">NUM_ENVS</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">ROLLOUT_ROUNDS</span> <span class="o">=</span> <span class="mi">3</span>        <span class="c1"># 3 × 8 × 60 = 1440 transitions/update (was 480 with rounds=1)</span>
+<span class="n">NUM_PPO_EPOCHS</span> <span class="o">=</span><span class="mi">4</span>       <span class="c1"># passes over the rollout buffer (each pass shuffles then minibatch SGD)</span>
+<span class="n">PPO_MINIBATCH_SIZE</span> <span class="o">=</span> <span class="mi">256</span>  <span class="c1"># Adam steps per epoch ≈ ceil(transitions / this) × NUM_PPO_EPOCHS</span>
+
+<span class="c1"># PPO hyperparameters: linear LR decay (start → end) over TOTAL_PPO_UPDATES</span>
+<span class="n">PPO_LR_INITIAL</span> <span class="o">=</span>  <span class="mf">1e-5</span>
+<span class="n">PPO_LR_FINAL</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mf">1e-6</span>
+<span class="n">CRITIC_WARMUP_UPDATES</span> <span class="o">=</span> <span class="mi">15</span>  <span class="c1"># PPO updates with critic-only (policy loss off); actor still collects rollouts</span>
+<span class="n">GAMMA</span> <span class="o">=</span> <span class="mf">0.999</span>       <span class="c1"># slightly longer credit horizon for 60-lap races (also used for BC return targets)</span>
+<span class="n">LAM</span> <span class="o">=</span> <span class="mf">0.95</span>
+
+<span class="n">NUM_EVAL_GAMES</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="c1"># Weight on *new* raw eval mean: lower = smoother EMA line (0.95 was almost no smoothing)</span>
+<span class="n">EVAL_EMA_ALPHA</span> <span class="o">=</span> <span class="mf">0.9</span>
+<span class="n">TRAIN_REWARD_EMA_ALPHA</span> <span class="o">=</span> <span class="mf">0.92</span>  <span class="c1"># EMA of per-update mean reward for logging only</span>
+<span class="n">ENTROPY_COEF_INITIAL</span> <span class="o">=</span> <span class="mf">0.1</span>
+<span class="n">ENTROPY_COEF_FINAL</span> <span class="o">=</span> <span class="mf">0.02</span>
+<span class="n">VALUE_COEF</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># c_v: weight on value MSE in total_loss = policy + c_v * value - c_e * entropy</span>
+
+<span class="n">NUM_BC_EPISODES</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">NUM_BC_EPOCHS</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="n">BC_LR</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mf">1e-4</span>
+<span class="n">BC_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">126</span>
+<span class="n">BC_PIT_OVERSAMPLE</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">BC_PIT_LOSS_WEIGHT</span> <span class="o">=</span> <span class="mf">10.0</span>
+<span class="n">BC_ENERGY_MIX_PROB</span> <span class="o">=</span> <span class="mf">0.999</span>  <span class="c1"># prob to replace STD with random HRV/Boost/STD on stay-out steps</span>
+<span class="n">BC_HERO_2STOP_PROB</span> <span class="o">=</span> <span class="mf">0.5</span>   <span class="c1"># fraction of BC episodes where BlueCow follows 2-stop benchmark</span>
+<span class="n">BC_VALUE_COEF</span> <span class="o">=</span> <span class="mf">0.5</span>        <span class="c1"># weight on MSE(V, MC return) added to BC policy loss (same scale as VALUE_COEF)</span>
+
+
+<div class="viewcode-block" id="reset_critic_head_from_fresh_init">
+<a class="viewcode-back" href="../../train.html#formula_mar1.train.reset_critic_head_from_fresh_init">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">reset_critic_head_from_fresh_init</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">trained_params</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">obs_dim</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Optional ablation: re-init full critic trunk + value head (actor unchanged).&quot;&quot;&quot;</span>
+    <span class="n">fresh</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">rng</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="n">obs_dim</span><span class="p">)))[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">unfreeze</span><span class="p">(</span><span class="n">trained_params</span><span class="p">)</span>
+    <span class="n">fresh_u</span> <span class="o">=</span> <span class="n">unfreeze</span><span class="p">(</span><span class="n">fresh</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fresh_u</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;critic_&quot;</span><span class="p">):</span>
+            <span class="n">p</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="n">freeze</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_save_bc_weights</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">log_dir</span><span class="p">,</span> <span class="n">verbose</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Persist BC-pretrained params next to final/best pickles and under log_dir/checkpoints.&quot;&quot;&quot;</span>
+    <span class="n">cwd_path</span> <span class="o">=</span> <span class="s2">&quot;f1_bc_weights.pkl&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">cwd_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="n">saved</span> <span class="o">=</span> <span class="p">[</span><span class="n">cwd_path</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">log_dir</span><span class="p">:</span>
+        <span class="n">ckpt_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">log_dir</span><span class="p">,</span> <span class="s2">&quot;checkpoints&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">ckpt_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">run_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ckpt_dir</span><span class="p">,</span> <span class="s2">&quot;f1_bc_weights.pkl&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+        <span class="n">saved</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">run_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saved BC pretrained weights to: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">saved</span><span class="p">)))</span>
+
+
+<div class="viewcode-block" id="train_one_run">
+<a class="viewcode-back" href="../../train.html#formula_mar1.train.train_one_run">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">train_one_run</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Full BC + PPO training with distinct randomness from `seed` (init, BC, rollouts).</span>
+<span class="sd">    Returns eval learning curves and best/final params for multi-seed studies.</span>
+
+<span class="sd">    Returns dict with keys:</span>
+<span class="sd">      seed, eval_updates, eval_ema, eval_raw, best_ema_eval, best_params, final_params</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">vec_env</span> <span class="o">=</span> <span class="n">VecF1Env</span><span class="p">(</span><span class="n">num_envs</span><span class="o">=</span><span class="n">NUM_ENVS</span><span class="p">,</span> <span class="n">total_laps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">VEC_ENV_BACKEND</span><span class="p">)</span>
+    <span class="n">eval_env</span> <span class="o">=</span> <span class="n">F1TeamEnv</span><span class="p">(</span><span class="n">total_laps</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">SummaryWriter</span><span class="p">(</span><span class="n">log_dir</span><span class="p">)</span> <span class="k">if</span> <span class="n">log_dir</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="n">rollout_seed_offset</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">**</span> <span class="mi">8</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">F1AgentNN</span><span class="p">()</span>
+    <span class="n">dummy_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="n">TEAM_OBS_DIM</span><span class="p">))</span>
+    <span class="n">hero_params</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">rng</span><span class="p">,</span> <span class="n">dummy_obs</span><span class="p">)[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Pretraining policy to imitate mixed benchmark heuristic (1-stop and 2-stop)...&quot;</span><span class="p">)</span>
+    <span class="n">hero_params</span> <span class="o">=</span> <span class="n">pretrain_with_heuristic</span><span class="p">(</span>
+        <span class="n">model</span><span class="p">,</span> <span class="n">hero_params</span><span class="p">,</span> <span class="n">total_laps</span><span class="o">=</span><span class="n">vec_env</span><span class="o">.</span><span class="n">total_laps</span><span class="p">,</span> <span class="n">bc_seed</span><span class="o">=</span><span class="n">seed</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Keeping BC-trained critic (no reset); PPO will fine-tune with critic warm-up first.&quot;</span><span class="p">)</span>
+    <span class="n">opt_state</span> <span class="o">=</span> <span class="n">optax</span><span class="o">.</span><span class="n">adam</span><span class="p">(</span><span class="n">PPO_LR_INITIAL</span><span class="p">)</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">hero_params</span><span class="p">)</span>
+    <span class="n">best_ema_eval</span> <span class="o">=</span> <span class="o">-</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+    <span class="n">ema_eval</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">train_reward_ema</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">eval_updates</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">eval_ema_curve</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">eval_raw_curve</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Batched sampler: 2 heads -&gt; (B, 2) for PPO</span>
+    <span class="nd">@jax</span><span class="o">.</span><span class="n">jit</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_action_batch</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">obs_batch</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">B</span> <span class="o">=</span> <span class="n">obs_batch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">logits_tuple</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">({</span><span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">params</span><span class="p">},</span> <span class="n">obs_batch</span><span class="p">)</span>
+        <span class="n">logits_tuple</span> <span class="o">=</span> <span class="n">mask_pit_logits</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">,</span> <span class="n">obs_batch</span><span class="p">)</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">actions_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">log_probs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">logits</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">):</span>
+            <span class="n">key_i</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">B</span><span class="p">)</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">:</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">categorical</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">))(</span><span class="n">key_i</span><span class="p">,</span> <span class="n">logits</span><span class="p">)</span>
+            <span class="n">log_p</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+            <span class="n">log_probs</span> <span class="o">=</span> <span class="n">log_probs</span> <span class="o">+</span> <span class="n">log_p</span><span class="p">[</span><span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">B</span><span class="p">),</span> <span class="n">action</span><span class="p">]</span>
+            <span class="n">actions_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">actions_list</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (B, 2)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (B,)</span>
+        <span class="k">return</span> <span class="n">actions</span><span class="p">,</span> <span class="n">log_probs</span><span class="p">,</span> <span class="n">values</span>
+
+    <span class="nd">@jax</span><span class="o">.</span><span class="n">jit</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">greedy_action</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">obs_array</span><span class="p">):</span>
+        <span class="n">logits_tuple</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">({</span><span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">params</span><span class="p">},</span> <span class="n">obs_array</span><span class="p">)</span>
+        <span class="n">logits_tuple</span> <span class="o">=</span> <span class="n">mask_pit_logits</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">,</span> <span class="n">obs_array</span><span class="p">)</span>
+        <span class="n">a1</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">a2</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">logits_tuple</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">--- Eval after BC (greedy vs benchmark, </span><span class="si">{}</span><span class="s2"> games) [seed=</span><span class="si">{}</span><span class="s2">] ---&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">NUM_EVAL_GAMES</span><span class="p">,</span> <span class="n">seed</span><span class="p">))</span>
+    <span class="n">eval_scores_bc</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_EVAL_GAMES</span><span class="p">):</span>
+        <span class="n">eval_obs_dict</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="n">strategy_by_team</span> <span class="o">=</span> <span class="n">random_baseline_strategies_by_team</span><span class="p">(</span><span class="n">eval_env</span><span class="p">)</span>
+        <span class="n">hero_eval_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">while</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span> <span class="ow">or</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">current_lap</span> <span class="o">&lt;</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">total_laps</span><span class="p">:</span>
+            <span class="n">eval_actions</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">teams</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">:</span>
+                    <span class="n">t_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">eval_obs_dict</span><span class="p">[</span><span class="n">team</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="n">h_act</span> <span class="o">=</span> <span class="n">greedy_action</span><span class="p">(</span><span class="n">hero_params</span><span class="p">,</span> <span class="n">t_obs</span><span class="p">)</span>
+                    <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">h_act</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span><span class="p">:</span>
+                    <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                        <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">],</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                        <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">],</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+            <span class="n">eval_obs_dict</span><span class="p">,</span> <span class="n">e_rewards</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">eval_actions</span><span class="p">)</span>
+            <span class="n">hero_eval_reward</span> <span class="o">+=</span> <span class="n">e_rewards</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span>
+        <span class="n">eval_scores_bc</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hero_eval_reward</span><span class="p">)</span>
+    <span class="n">raw_eval_bc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">eval_scores_bc</span><span class="p">)</span>
+    <span class="n">ema_eval</span> <span class="o">=</span> <span class="n">raw_eval_bc</span>
+    <span class="n">best_ema_eval</span> <span class="o">=</span> <span class="n">raw_eval_bc</span>
+    <span class="n">best_params</span> <span class="o">=</span> <span class="n">hero_params</span>
+    <span class="n">eval_updates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">eval_ema_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">ema_eval</span><span class="p">))</span>
+    <span class="n">eval_raw_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">raw_eval_bc</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Eval/Raw_Mean&quot;</span><span class="p">,</span> <span class="n">raw_eval_bc</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Eval/EMA&quot;</span><span class="p">,</span> <span class="n">raw_eval_bc</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Eval raw (after BC): </span><span class="si">{:.2f}</span><span class="s2">  EMA: </span><span class="si">{:.2f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">raw_eval_bc</span><span class="p">,</span> <span class="n">raw_eval_bc</span><span class="p">))</span>
+    <span class="n">_save_bc_weights</span><span class="p">(</span><span class="n">hero_params</span><span class="p">,</span> <span class="n">log_dir</span><span class="p">,</span> <span class="n">verbose</span><span class="p">)</span>
+
+    <span class="n">n_sanity</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">sanity_scores</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_sanity</span><span class="p">):</span>
+        <span class="n">eval_obs_dict</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="n">strategy_by_team</span> <span class="o">=</span> <span class="n">random_baseline_strategies_by_team</span><span class="p">(</span><span class="n">eval_env</span><span class="p">)</span>
+        <span class="n">hero_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">while</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span> <span class="ow">or</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">current_lap</span> <span class="o">&lt;</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">total_laps</span><span class="p">:</span>
+            <span class="n">eval_actions</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">teams</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span><span class="p">:</span>
+                    <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">ACT_PIT_MEDIUM</span><span class="p">,</span> <span class="n">ACT_PIT_MEDIUM</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span>
+                        <span class="k">else</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                            <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">],</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">strategy</span> <span class="o">=</span> <span class="s2">&quot;1stop&quot;</span> <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span> <span class="k">else</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">]</span>
+                    <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                        <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="p">)</span>
+            <span class="n">eval_obs_dict</span><span class="p">,</span> <span class="n">e_rewards</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">eval_actions</span><span class="p">)</span>
+            <span class="n">hero_reward</span> <span class="o">+=</span> <span class="n">e_rewards</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span>
+        <span class="n">sanity_scores</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hero_reward</span><span class="p">)</span>
+    <span class="n">sanity_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">sanity_scores</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Eval with BlueCow=heuristic 1-stop (sanity, </span><span class="si">{}</span><span class="s2"> games): </span><span class="si">{:.2f}</span><span class="s2">  (expect ~mid-pack if ~0)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">n_sanity</span><span class="p">,</span> <span class="n">sanity_mean</span><span class="p">))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;---------------------------------------------------</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">T</span> <span class="o">=</span> <span class="n">vec_env</span><span class="o">.</span><span class="n">total_laps</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="n">vec_env</span><span class="o">.</span><span class="n">num_envs</span>
+    <span class="n">transitions_per_update</span> <span class="o">=</span> <span class="n">ROLLOUT_ROUNDS</span> <span class="o">*</span> <span class="n">N</span> <span class="o">*</span> <span class="n">T</span>
+    <span class="n">episodes_per_update</span> <span class="o">=</span> <span class="n">ROLLOUT_ROUNDS</span> <span class="o">*</span> <span class="n">N</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🏎️ Batched training: </span><span class="si">{}</span><span class="s2"> rounds x </span><span class="si">{}</span><span class="s2"> envs x </span><span class="si">{}</span><span class="s2"> steps = </span><span class="si">{}</span><span class="s2"> episodes, </span><span class="si">{}</span><span class="s2"> transitions/update, </span><span class="si">{}</span><span class="s2"> PPO epochs, minibatch </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">ROLLOUT_ROUNDS</span><span class="p">,</span> <span class="n">NUM_ENVS</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">episodes_per_update</span><span class="p">,</span> <span class="n">transitions_per_update</span><span class="p">,</span> <span class="n">NUM_PPO_EPOCHS</span><span class="p">,</span> <span class="n">PPO_MINIBATCH_SIZE</span><span class="p">))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🏁 Total PPO updates: </span><span class="si">{}</span><span class="s2">, eval every </span><span class="si">{}</span><span class="s2"> updates, critic warm-up </span><span class="si">{}</span><span class="s2"> updates&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">TOTAL_PPO_UPDATES</span><span class="p">,</span> <span class="n">EVAL_EVERY</span><span class="p">,</span> <span class="n">CRITIC_WARMUP_UPDATES</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">update</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">TOTAL_PPO_UPDATES</span><span class="p">):</span>
+        <span class="n">all_states</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_actions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_log_probs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_adv</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_returns</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">round_rewards_sum</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="k">for</span> <span class="n">round_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ROLLOUT_ROUNDS</span><span class="p">):</span>
+            <span class="n">rng</span><span class="p">,</span> <span class="n">reset_key</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
+            <span class="n">obs_batch</span> <span class="o">=</span> <span class="n">vec_env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span>
+                <span class="n">seed</span><span class="o">=</span><span class="n">rollout_seed_offset</span> <span class="o">+</span> <span class="n">update</span> <span class="o">*</span> <span class="n">ROLLOUT_ROUNDS</span> <span class="o">+</span> <span class="n">round_idx</span>
+            <span class="p">)</span>
+            <span class="n">states</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">actions_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">log_probs_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">rewards_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">values_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
+                <span class="n">rng</span><span class="p">,</span> <span class="n">step_key</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
+                <span class="n">obs_jax</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obs_batch</span><span class="p">)</span>
+                <span class="n">actions</span><span class="p">,</span> <span class="n">log_probs</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="n">sample_action_batch</span><span class="p">(</span><span class="n">hero_params</span><span class="p">,</span> <span class="n">obs_jax</span><span class="p">,</span> <span class="n">step_key</span><span class="p">)</span>
+                <span class="n">next_obs</span><span class="p">,</span> <span class="n">rewards</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">vec_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">actions</span><span class="p">))</span>
+                <span class="n">states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_jax</span><span class="p">)</span>
+                <span class="n">actions_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+                <span class="n">log_probs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">log_probs</span><span class="p">)</span>
+                <span class="n">rewards_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span>
+                <span class="n">values_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+                <span class="n">obs_batch</span> <span class="o">=</span> <span class="n">next_obs</span>
+
+            <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">next_vals</span> <span class="o">=</span> <span class="n">sample_action_batch</span><span class="p">(</span><span class="n">hero_params</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obs_batch</span><span class="p">),</span> <span class="n">rng</span><span class="p">)</span>
+            <span class="n">rewards_arr</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rewards_list</span><span class="p">)</span>
+            <span class="n">values_arr</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values_list</span><span class="p">)</span>
+            <span class="c1"># Rollouts are full fixed-length episodes; only the final transition is terminal.</span>
+            <span class="c1"># Use done=False here so GAE/returns bootstrap across timesteps.</span>
+            <span class="n">adv</span><span class="p">,</span> <span class="n">returns</span> <span class="o">=</span> <span class="n">compute_gae_batched</span><span class="p">(</span>
+                <span class="n">rewards_arr</span><span class="p">,</span> <span class="n">values_arr</span><span class="p">,</span> <span class="n">next_vals</span><span class="p">,</span> <span class="n">done</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="n">GAMMA</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="n">LAM</span>
+            <span class="p">)</span>
+            <span class="n">round_rewards_sum</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">rewards_arr</span><span class="p">))</span>
+
+            <span class="n">all_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">all_actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">actions_list</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">all_log_probs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">log_probs_list</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">all_adv</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">adv</span><span class="p">)</span>
+            <span class="n">all_returns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">returns</span><span class="p">)</span>
+
+        <span class="n">b_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_states</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">b_actions</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_actions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">b_log_probs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_log_probs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">adv</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_adv</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">returns</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_returns</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">adv</span> <span class="o">=</span> <span class="p">(</span><span class="n">adv</span> <span class="o">-</span> <span class="n">jnp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">adv</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">adv</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+        <span class="n">progress</span> <span class="o">=</span> <span class="n">update</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">TOTAL_PPO_UPDATES</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">entropy_coef</span> <span class="o">=</span> <span class="n">ENTROPY_COEF_INITIAL</span> <span class="o">+</span> <span class="p">(</span><span class="n">ENTROPY_COEF_FINAL</span> <span class="o">-</span> <span class="n">ENTROPY_COEF_INITIAL</span><span class="p">)</span> <span class="o">*</span> <span class="n">progress</span>
+        <span class="n">entropy_coef</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">current_lr</span> <span class="o">=</span> <span class="n">PPO_LR_INITIAL</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">progress</span><span class="p">)</span> <span class="o">+</span> <span class="n">PPO_LR_FINAL</span> <span class="o">*</span> <span class="n">progress</span>
+        <span class="n">current_lr_j</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">current_lr</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">clip_eps</span> <span class="o">=</span> <span class="mf">0.1</span>
+
+        <span class="n">mb_p_loss</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">mb_v_loss</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">mb_kl</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">mb_clip_frac</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">mb_count</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">n_rollout</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">b_obs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_PPO_EPOCHS</span><span class="p">):</span>
+            <span class="n">rng</span><span class="p">,</span> <span class="n">perm_key</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
+            <span class="n">perm</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">perm_key</span><span class="p">,</span> <span class="n">n_rollout</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_rollout</span><span class="p">,</span> <span class="n">PPO_MINIBATCH_SIZE</span><span class="p">):</span>
+                <span class="n">end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">PPO_MINIBATCH_SIZE</span><span class="p">,</span> <span class="n">n_rollout</span><span class="p">)</span>
+                <span class="n">idx</span> <span class="o">=</span> <span class="n">perm</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+                <span class="n">hero_params</span><span class="p">,</span> <span class="n">opt_state</span><span class="p">,</span> <span class="n">p_loss</span><span class="p">,</span> <span class="n">v_loss</span><span class="p">,</span> <span class="n">approx_kl</span><span class="p">,</span> <span class="n">clip_frac</span> <span class="o">=</span> <span class="n">ppo_update</span><span class="p">(</span>
+                    <span class="n">hero_params</span><span class="p">,</span>
+                    <span class="n">opt_state</span><span class="p">,</span>
+                    <span class="n">b_obs</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="n">b_actions</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="n">b_log_probs</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="n">adv</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="n">returns</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                    <span class="n">entropy_coef</span><span class="p">,</span>
+                    <span class="n">lr</span><span class="o">=</span><span class="n">current_lr_j</span><span class="p">,</span>
+                    <span class="n">value_coef</span><span class="o">=</span><span class="n">VALUE_COEF</span><span class="p">,</span>
+                    <span class="n">critic_only</span><span class="o">=</span><span class="p">(</span><span class="n">update</span> <span class="o">&lt;</span> <span class="n">CRITIC_WARMUP_UPDATES</span><span class="p">),</span>
+                    <span class="n">clip_eps</span><span class="o">=</span><span class="n">clip_eps</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">mb_p_loss</span> <span class="o">=</span> <span class="n">mb_p_loss</span> <span class="o">+</span> <span class="n">p_loss</span>
+                <span class="n">mb_v_loss</span> <span class="o">=</span> <span class="n">mb_v_loss</span> <span class="o">+</span> <span class="n">v_loss</span>
+                <span class="n">mb_kl</span> <span class="o">=</span> <span class="n">mb_kl</span> <span class="o">+</span> <span class="n">approx_kl</span>
+                <span class="n">mb_clip_frac</span> <span class="o">=</span> <span class="n">mb_clip_frac</span> <span class="o">+</span> <span class="n">clip_frac</span>
+                <span class="n">mb_count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">denom</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">mb_count</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">p_loss_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">mb_p_loss</span> <span class="o">/</span> <span class="n">denom</span><span class="p">)</span>
+        <span class="n">v_loss_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">mb_v_loss</span> <span class="o">/</span> <span class="n">denom</span><span class="p">)</span>
+        <span class="n">kl_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">mb_kl</span> <span class="o">/</span> <span class="n">denom</span><span class="p">)</span>
+        <span class="n">clip_frac_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">mb_clip_frac</span> <span class="o">/</span> <span class="n">denom</span><span class="p">)</span>
+
+        <span class="n">total_reward</span> <span class="o">=</span> <span class="n">round_rewards_sum</span>
+        <span class="n">mean_reward</span> <span class="o">=</span> <span class="n">total_reward</span> <span class="o">/</span> <span class="n">episodes_per_update</span>
+        <span class="n">train_reward_ema</span> <span class="o">=</span> <span class="n">mean_reward</span> <span class="k">if</span> <span class="n">train_reward_ema</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span>
+            <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">TRAIN_REWARD_EMA_ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="n">mean_reward</span> <span class="o">+</span> <span class="n">TRAIN_REWARD_EMA_ALPHA</span> <span class="o">*</span> <span class="n">train_reward_ema</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Total_Reward&quot;</span><span class="p">,</span> <span class="n">total_reward</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Mean_Reward&quot;</span><span class="p">,</span> <span class="n">mean_reward</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Mean_Reward_EMA&quot;</span><span class="p">,</span> <span class="n">train_reward_ema</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Entropy_Coef&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">),</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Learning_Rate&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">current_lr</span><span class="p">),</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Training/Critic_Warmup&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">update</span> <span class="o">&lt;</span> <span class="n">CRITIC_WARMUP_UPDATES</span><span class="p">),</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Loss/Policy_Loss&quot;</span><span class="p">,</span> <span class="n">p_loss_mean</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Loss/Value_Loss&quot;</span><span class="p">,</span> <span class="n">v_loss_mean</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;PPO/Approx_KL&quot;</span><span class="p">,</span> <span class="n">kl_mean</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;PPO/Clip_Fraction&quot;</span><span class="p">,</span> <span class="n">clip_frac_mean</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">phase</span> <span class="o">=</span> <span class="s2">&quot;critic-only&quot;</span> <span class="k">if</span> <span class="n">update</span> <span class="o">&lt;</span> <span class="n">CRITIC_WARMUP_UPDATES</span> <span class="k">else</span> <span class="s2">&quot;PPO&quot;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Update </span><span class="si">{:04d}</span><span class="s2"> [</span><span class="si">{}</span><span class="s2">] | lr=</span><span class="si">{:.2e}</span><span class="s2"> | Mean reward: </span><span class="si">{:.2f}</span><span class="s2"> | P_loss: </span><span class="si">{:.3f}</span><span class="s2"> | V_loss: </span><span class="si">{:.3f}</span><span class="s2"> | KL: </span><span class="si">{:.4f}</span><span class="s2"> | ClipFrac: </span><span class="si">{:.3f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">update</span><span class="p">,</span> <span class="n">phase</span><span class="p">,</span> <span class="n">current_lr</span><span class="p">,</span> <span class="n">mean_reward</span><span class="p">,</span> <span class="n">p_loss_mean</span><span class="p">,</span> <span class="n">v_loss_mean</span><span class="p">,</span> <span class="n">kl_mean</span><span class="p">,</span> <span class="n">clip_frac_mean</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">update</span> <span class="o">%</span> <span class="n">EVAL_EVERY</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">update</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">--- Greedy Eval (vs 2/3-stop baseline, </span><span class="si">{}</span><span class="s2"> games) ---&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">NUM_EVAL_GAMES</span><span class="p">))</span>
+            <span class="n">eval_scores</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_EVAL_GAMES</span><span class="p">):</span>
+                <span class="n">eval_obs_dict</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+                <span class="n">strategy_by_team</span> <span class="o">=</span> <span class="n">random_baseline_strategies_by_team</span><span class="p">(</span><span class="n">eval_env</span><span class="p">)</span>
+                <span class="n">hero_eval_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="k">while</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span> <span class="ow">or</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">current_lap</span> <span class="o">&lt;</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">total_laps</span><span class="p">:</span>
+                    <span class="n">eval_actions</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">teams</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">team</span> <span class="o">==</span> <span class="s2">&quot;BlueCow&quot;</span><span class="p">:</span>
+                            <span class="n">t_obs</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">eval_obs_dict</span><span class="p">[</span><span class="n">team</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                            <span class="n">h_act</span> <span class="o">=</span> <span class="n">greedy_action</span><span class="p">(</span><span class="n">hero_params</span><span class="p">,</span> <span class="n">t_obs</span><span class="p">)</span>
+                            <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">h_act</span><span class="p">)</span>
+                        <span class="k">elif</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">pending_starting_tyres</span><span class="p">:</span>
+                            <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                                <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">],</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                            <span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">eval_actions</span><span class="p">[</span><span class="n">team</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_benchmark_action</span><span class="p">(</span>
+                                <span class="n">eval_env</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">strategy_by_team</span><span class="p">[</span><span class="n">team</span><span class="p">],</span> <span class="n">random_tyre_order</span><span class="o">=</span><span class="kc">True</span>
+                            <span class="p">)</span>
+                    <span class="n">eval_obs_dict</span><span class="p">,</span> <span class="n">e_rewards</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">eval_env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">eval_actions</span><span class="p">)</span>
+                    <span class="n">hero_eval_reward</span> <span class="o">+=</span> <span class="n">e_rewards</span><span class="p">[</span><span class="s2">&quot;BlueCow&quot;</span><span class="p">]</span>
+                <span class="n">eval_scores</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hero_eval_reward</span><span class="p">)</span>
+            <span class="n">raw_eval</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">eval_scores</span><span class="p">)</span>
+            <span class="n">raw_std</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">eval_scores</span><span class="p">))</span>
+            <span class="n">ema_eval</span> <span class="o">=</span> <span class="n">raw_eval</span> <span class="k">if</span> <span class="n">ema_eval</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span>
+                <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">EVAL_EMA_ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="n">ema_eval</span> <span class="o">+</span> <span class="n">EVAL_EMA_ALPHA</span> <span class="o">*</span> <span class="n">raw_eval</span>
+            <span class="p">)</span>
+            <span class="n">eval_updates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">update</span><span class="p">)</span>
+            <span class="n">eval_ema_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">ema_eval</span><span class="p">))</span>
+            <span class="n">eval_raw_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">raw_eval</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Eval/Raw_Mean&quot;</span><span class="p">,</span> <span class="n">raw_eval</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+                <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Eval/Raw_Std&quot;</span><span class="p">,</span> <span class="n">raw_std</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+                <span class="n">writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="s2">&quot;Eval/EMA&quot;</span><span class="p">,</span> <span class="n">ema_eval</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="s2">&quot;Eval raw: </span><span class="si">{:.2f}</span><span class="s2"> ± </span><span class="si">{:.2f}</span><span class="s2"> (</span><span class="si">{}</span><span class="s2"> games)  EMA: </span><span class="si">{:.2f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">raw_eval</span><span class="p">,</span> <span class="n">raw_std</span><span class="p">,</span> <span class="n">NUM_EVAL_GAMES</span><span class="p">,</span> <span class="n">ema_eval</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">ema_eval</span> <span class="o">&gt;</span> <span class="n">best_ema_eval</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🌟 NEW BEST EMA: </span><span class="si">{:.2f}</span><span class="s2"> -&gt; </span><span class="si">{:.2f}</span><span class="s2">, saving best checkpoint in-memory.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">best_ema_eval</span><span class="p">,</span> <span class="n">ema_eval</span><span class="p">))</span>
+                <span class="n">best_ema_eval</span> <span class="o">=</span> <span class="n">ema_eval</span>
+                <span class="n">best_params</span> <span class="o">=</span> <span class="n">hero_params</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;---------------------------------------------------</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">vec_env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🏁 Training Complete!&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;seed&quot;</span><span class="p">:</span> <span class="n">seed</span><span class="p">,</span>
+        <span class="s2">&quot;eval_updates&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">eval_updates</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+        <span class="s2">&quot;eval_ema&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">eval_ema_curve</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">&quot;eval_raw&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">eval_raw_curve</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">&quot;best_ema_eval&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">best_ema_eval</span><span class="p">),</span>
+        <span class="s2">&quot;best_params&quot;</span><span class="p">:</span> <span class="n">best_params</span><span class="p">,</span>
+        <span class="s2">&quot;final_params&quot;</span><span class="p">:</span> <span class="n">hero_params</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../train.html#formula_mar1.train.main">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">train_one_run</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="s2">&quot;runs/Formula_Mar1_Experiment_1&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;f1_best_weights.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;best_params&quot;</span><span class="p">],</span> <span class="n">f</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saved best EMA checkpoint to f1_best_weights.pkl&quot;</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;f1_trained_weights.pkl&quot;</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">&quot;final_params&quot;</span><span class="p">],</span> <span class="n">f</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;💾 Final model weights saved to f1_trained_weights.pkl!&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Jan A. Krzywda.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
